@@ -1,35 +1,43 @@
-# FAST Transfer Events: Kafka Producer / Consumer + Grafana
+# FAST Transfer Events: Kafka + Grafana Lab
 
-C# (.NET 10) ile yazılmış bir FAST (Fonların Anlık ve Sürekli Transferi) event akışı örneği. Producer bir HTTP API sunar ve FAST event'lerini Kafka'ya yazar; consumer `fast-transfer-consumers-dotnet` consumer group'u ile bu event'leri tüketir. Producer ve consumer 2'şer replica ile çalışır. Prometheus metrikleri Grafana dashboard'larında gösterilir.
+FAST (Fonların Anlık ve Sürekli Transferi) para transferi event'lerini Kafka üzerinden taşıyan ve Grafana ile izleyen örnek bir proje.
 
-## FAST event'leri
+- **Uygulama:** C# (.NET 10) producer ve consumer; ikisi de 2 replica ile çalışır.
+- **Mutabakat:** Java Kafka Streams servisi (`fast-reconciler`, 2 instance). Her `fast_send`'i sonucuyla eşleştirir ve FAST iş metriklerini üretir: tamamlanma süresi, banka, tutar, takılı transferler.
+- **Altyapı:** Kafka; Prometheus ve Loki ile metrik ve log toplama.
+- **İzleme:** Grafana dashboard'ları ve alarmları.
+- **Yük testi:** Artillery ve k6.
 
-| Event | Endpoint | Kafka topic | Anlamı |
-|---|---|---|---|
-| `fast_send` | `POST /events/fast_send` | `fast_send` | FAST transferi gönderildi |
-| `fast_send_success` | `POST /events/fast_send_success` | `fast_send_success` | Transfer başarıyla tamamlandı |
-| `fast_send_failed` | `POST /events/fast_send_failed` | `fast_send_failed` | Transfer başarısız oldu (`failure_reason` zorunlu) |
-
-Her event kendi topic'ine (3 partition) yazılır; message key `transaction_id`'dir. Body zorunlu alanları: `transaction_id`, `amount` (> 0) ve `currency` (`TRY`, verilmezse varsayılan). Bilinmeyen event adı `404`, hatalı body `400` döner.
-
-## Çalıştırma
-
-Docker ve Docker Compose kurulu olmalıdır:
-
-```bash
-docker compose up --build
+```mermaid
+flowchart LR
+    Client["İstemci / Artillery"] --> LB["producer-lb (nginx)<br/>:18081"]
+    LB --> P1["dotnet-producer #1"] & P2["dotnet-producer #2"]
+    P1 & P2 --> K[("Kafka<br/>fast_send · fast_send_success · fast_send_failed")]
+    K --> C1["dotnet-consumer #1"] & C2["dotnet-consumer #2"]
+    K --> R["fast-reconciler ×2<br/>(Kafka Streams)"]
+    R --> KR[("fast_transfer_matched<br/>fast_transfer_unmatched")]
+    P1 & P2 & C1 & C2 & R & K -.-> M["Prometheus · Loki"] -.-> G["Grafana :3000"]
 ```
 
-Servisler:
+## Hızlı başlangıç
 
-- Producer API: http://localhost:18081 (nginx load balancer → 2 producer replica)
-- Consumer metrikleri: http://localhost:2114/metrics ve http://localhost:2115/metrics (replica başına bir port)
-- Grafana: http://localhost:3000 (admin/admin)
-- Prometheus: http://localhost:9090
-- Loki: http://localhost:3100
-- kafka-exporter: http://localhost:9308/metrics
+Docker ve Docker Compose gerekir:
 
-Event üretmek için:
+```bash
+docker compose up -d --build
+```
+
+| Servis | Adres |
+|---|---|
+| Producer API (load balancer) | http://localhost:18081 |
+| Grafana | http://localhost:3000 (admin / admin) |
+| Prometheus | http://localhost:9090 |
+| Consumer metrikleri (replica başına) | http://localhost:2114/metrics, http://localhost:2115/metrics |
+| Reconciler metrikleri (instance başına) | http://localhost:9400/metrics, http://localhost:9401/metrics |
+| kafka-exporter | http://localhost:9308/metrics |
+| Loki | http://localhost:3100 |
+
+Bir transfer gönderip sonucunu bildirmek:
 
 ```bash
 curl -X POST http://localhost:18081/events/fast_send \
@@ -39,155 +47,182 @@ curl -X POST http://localhost:18081/events/fast_send \
 curl -X POST http://localhost:18081/events/fast_send_success \
   -H "Content-Type: application/json" \
   -d '{"transaction_id":"tx-1001","amount":1250.75,"sender_bank":"00010","receiver_bank":"00046"}'
-
-curl -X POST http://localhost:18081/events/fast_send_failed \
-  -H "Content-Type: application/json" \
-  -d '{"transaction_id":"tx-1002","amount":99.90,"failure_reason":"INSUFFICIENT_BALANCE"}'
 ```
 
-## Dashboard'lar
+Ardından Grafana'da `FAST / FAST Operations` dashboard'unu açın.
 
-Dashboard'lar klasörlere göre gruplanmıştır. Her dashboard'un sağ üstündeki **FAST lab** menüsünden diğerlerine geçilebilir (zaman aralığı korunur).
+## FAST event'leri
 
-| Klasör | Dashboard | Kimin için | İçerik |
+| Event | Endpoint | Kafka topic | Anlamı |
 |---|---|---|---|
-| **FAST** | **FAST Operations** | İş / operasyon | Özet, hacim ve alert eşikleri, tamamlanma süresi, bankalar, para ve hata nedenleri |
-| **FAST** | **FAST Services** | Uygulama ekibi | Producer API, consumer replica'ları, runtime ve loglar |
-| **Kafka** | **Kafka Consumer Groups & Broker** | Platform | Consumer group lag'i, partition detayları, broker sağlığı |
+| `fast_send` | `POST /events/fast_send` | `fast_send` | Transfer gönderildi |
+| `fast_send_success` | `POST /events/fast_send_success` | `fast_send_success` | Transfer başarıyla tamamlandı |
+| `fast_send_failed` | `POST /events/fast_send_failed` | `fast_send_failed` | Transfer başarısız oldu |
 
-Panellerin ayrıntısı:
+Body alanları:
 
-- **FAST Operations:**
-  - **Özet:** transfer sayısı, başarı oranı, tamamlanma süresi p95, takılı transferler (> 30 sn), başarılı ve başarısız TRY tutarları.
-  - **Hacim ve alert eşikleri:** `FAST alerts` listesi ve hacim grafikleri. Grafiklerde alert eşikleri kesikli çizgi, mesai saatleri gölge olarak görünür; geçen haftanın aynı saatiyle karşılaştırılır.
-  - **Tamamlanma:** `fast_send` → sonuç süresi (p50/p95/p99 ve heatmap), sonuç bekleyen, takılı ve hiç sonuç almamış transferler.
-  - **Bankalar:** gönderen/alıcı seçilebilir. Banka tablosu, TRY hacim payı, en kötü 5 bankanın hata oranı.
-  - **Para ve hatalar:** dakikalık TRY hacmi, ortalama tutar, tutar dağılımı, hata nedenleri.
-- **FAST Services:**
-  - **Replica'lar:** ayakta olan producer/consumer replica sayısı, group üye sayısı, API hata oranı ve p95.
-  - **Producer API:** endpoint/status bazında istek/s, p95/p99, replica başına istek (load balancer dağılımı), 4xx/5xx oranı, hata nedenleri.
-  - **Consumer replica'ları:** replica başına tüketim, replica'ların okuduğu partition'lar, Kafka → consumer gecikmesi, eşleştirme durumu, hatalar.
-  - **Runtime:** replica başına GC heap, working set, CPU, GC sayısı.
-  - **Loglar:** hata/uyarı log sayısı ve logları, servis ve regex filtreli tüm loglar.
-- **Kafka Consumer Groups & Broker:**
-  - **Consumer group:** üye sayısı, toplam lag, tüketme ve üretme hızı, lag'in tahmini erime süresi, topic bazında lag.
-  - **Partition'lar:** partition başına lag ve tüketim hızı, group üyeliğinin zaman içindeki değişimi, offset/lag tablosu.
-  - **Broker:** broker ve controller durumu, offline / under-replicated partition'lar, topic başına mesaj/s, byte in/out, Produce/Fetch istek süresi p99.
+| Alan | Zorunlu | Açıklama |
+|---|---|---|
+| `transaction_id` | Evet | Transferin kimliği; Kafka message key'i olarak da kullanılır |
+| `amount` | Evet | TRY tutar, 0'dan büyük olmalı |
+| `currency` | Hayır | Yalnızca `TRY` kabul edilir (varsayılan) |
+| `failure_reason` | `fast_send_failed` için evet | Ör. `INSUFFICIENT_BALANCE` |
+| `sender_bank`, `receiver_bank` | Hayır | 5 haneli banka kodu (ör. `00010`). Boşsa IBAN'dan okunur. |
+| `sender_iban`, `receiver_iban`, `description`, `sent_at`, `source` | Hayır | Bilgi amaçlı |
 
-Consumer group üyeliği değiştiğinde (restart/rebalance) grafiklerde mor işaret görünür.
+Yanıtlar:
 
-Grafana'nın Loki data source'u da otomatik provision edilir; container logları `Explore` ekranından görülebilir.
+- `202`: event Kafka'ya yazıldı.
+- `400`: geçersiz body (eksik alan, `TRY` dışı para birimi, bozuk JSON).
+- `404`: bilinmeyen event adı.
+- `503`: Kafka'ya yazılamadı.
 
-### Bankalar
+Her event kendi topic'ine (3 partition) yazılır.
 
-Banka kodları [Banks.cs](./dotnet/FastTransfer.Shared/Banks.cs) içindedir. Kod, `sender_bank`/`receiver_bank` alanından okunur; bu alanlar boşsa IBAN'ın 5–9. hanelerinden alınır.
+## Proje yapısı
 
-- Listede olmayan kodlar `other` olarak raporlanır. Bu, metrik etiket sayısının sınırsız büyümesini önler.
-- Enpara.com, QNB altyapısını ve 00111 kodunu kullandığı için IBAN'dan ayırt edilemez; ikisi `QNB / Enpara.com` olarak birlikte raporlanır.
+```
+dotnet/
+  FastTransfer.Shared/     FAST modelleri, ortam değişkeni yardımcıları
+  FastTransfer.Producer/   HTTP API → Kafka                         (+ Dockerfile)
+  FastTransfer.Consumer/   Kafka → iş işleme ve teknik metrikler    (+ Dockerfile)
+reconciler/                Java 21 / Kafka Streams: eşleştirme ve FAST iş metrikleri (+ Dockerfile, testler)
+observability/
+  prometheus.yml           scrape ayarları (replica'lar Docker DNS ile bulunur)
+  prometheus/rules/        FAST recording rule'ları (alarmların temeli)
+  grafana/dashboards/      FAST/ ve Kafka/ klasörlerindeki dashboard JSON'ları
+  grafana/provisioning/    veri kaynakları, dashboard sağlayıcısı, alarmlar
+  nginx/                   producer load balancer ayarı
+  alloy/, loki/            log toplama
+  kafka-jmx-exporter/      broker metrikleri
+performance/
+  artillery/               senaryolu yük ve alarm testleri
+  producer.js              k6 yük testi
+docker-compose.yml
+dashboard.md               dashboard'lar, alarmlar ve veri akışı
+```
 
-### Transfer eşleştirme
+## Mutabakat: fast-reconciler (Kafka Streams)
 
-Consumer, `fast_send` ile sonucunu `transaction_id` üzerinden bellekte eşleştirir. Süre, Kafka'ya yazılma zamanlarından hesaplanır. Bu sayede sonuç, send'den önce okunsa da süre doğru çıkar.
+Bir transferin `fast_send`'i ile sonucunu (`fast_send_success` / `fast_send_failed`) eşleştirmek **durum** (state) gerektirir: önce gelen taraf, diğeri gelene kadar bir yerde tutulmalıdır. Bu iş [reconciler/](./reconciler/) altındaki Java Kafka Streams servisinde yapılır:
+
+```
+fast_send ─────────┐
+fast_send_success ─┼─► transaction_id'ye göre repartition ─► eşleştirici ─┬─► fast_transfer_matched   (süre, sonuç, banka, tutar)
+fast_send_failed ──┘                                     [RocksDB state    └─► fast_transfer_unmatched (10 dk'da eşleşmeyenler)
+                                                          + changelog]
+```
+
+- **Kalıcı durum:** state RocksDB'de tutulur ve Kafka'daki bir changelog topic'ine yedeklenir. Instance yeniden başlasa, eklense veya azaltılsa bile yarım kalan eşleşmeler kaybolmaz; partition ile birlikte yeni instance'a taşınır. Taşımayı `NUM_STANDBY_REPLICAS=1` hızlandırır.
+- **Producer'dan bağımsız:** girdi `transaction_id`'ye göre yeniden bölümlenir. Bu yüzden producer'ların partitioner'ı veya topic partition sayıları eşleşmeyi etkilemez.
+- **Exactly-once:** `exactly_once_v2` ile her transfer çıktı topic'lerine tam bir kez yazılır.
+- **Bilgi fast_send'den gelir:** banka ve tutar her zaman `fast_send`'den alınır. Sonuç event'leri yalnızca `transaction_id` taşısa bile banka ve tutar bazında doğru sayılar çıkar.
+- **Süre event zamanına göre:** tamamlanma süresi iki event'in Kafka'ya yazılma zamanından hesaplanır. Okuma sırasından (ör. backlog boşalırken) etkilenmez.
+- **Takılı / eşleşmeyen transferler:** her 5 saniyede state taranır. 30 sn'den uzun bekleyenler "takılı" sayılır. 10 dakikada eşleşmeyenler `fast_transfer_unmatched` topic'ine `transaction_id` ile yazılır.
+
+Test edildi: yük altında reconciler 2 → 1 → 2 instance'a indirilip çıkarıldı. 900 transferin 900'ü eşleşti; eşleşmeyen, bekleyen ve tekrar eden 0. Birim testleri `TopologyTestDriver` ile Docker build sırasında çalışır.
 
 | Ortam değişkeni | Varsayılan | Anlamı |
 |---|---|---|
+| `APPLICATION_ID` | `fast-reconciler` | Kafka Streams uygulama kimliği (consumer group adı da budur) |
 | `FAST_PENDING_THRESHOLD` | `30s` | Bu süreden uzun sonuç bekleyen transfer "takılı" sayılır |
-| `FAST_MATCH_TTL` | `10m` | Bu süre içinde eşleşmeyen kayıt düşürülür ve `fast_transfers_expired_total` artar |
+| `FAST_MATCH_TTL` | `10m` | Bu sürede eşleşmeyen kayıt `fast_transfer_unmatched`'e yazılır |
+| `FAST_SCAN_INTERVAL` | `5s` | State tarama sıklığı |
+| `NUM_STANDBY_REPLICAS` | `1` | Her task'ın yedek kopya sayısı (hızlı devralma için) |
+| `PROCESSING_GUARANTEE` | `exactly_once_v2` | `at_least_once` da kullanılabilir |
+| `REPARTITION_PARTITIONS` | `3` | İç repartition topic'inin partition sayısı = en fazla paralel instance |
 
-Eşleştirme durumu her replica'nın kendi belleğindedir:
+Çıktı topic'lerini okumak:
 
-- **Doğru replica:** bir transferin bütün event'leri aynı replica'ya düşer (aşağıdaki **Ölçekleme** bölümüne bakın).
-- **Restart / rebalance:** consumer yeniden başladığında veya partition'lar başka replica'ya geçtiğinde, yarım kalan eşleşmeler taşınmaz. TTL dolunca "expired" olarak raporlanır.
+```bash
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 \
+  --topic fast_transfer_unmatched --from-beginning --consumer-property isolation.level=read_committed
+```
 
-## Servisler ve ölçekleme
+**Sayımlar için not:** çıktı topic'leri exactly-once ile yazıldığı için offset'leri transaction işaretlerini de içerir. Kayıt sayısı offset farkından **hesaplanamaz**. Sayılar reconciler metriklerinden, tek tek kayıtlar topic'lerden okunur.
 
-Kod [dotnet/](./dotnet/) altındadır ([FastTransfer.slnx](./dotnet/FastTransfer.slnx)):
+### Banka listesi
 
-| Proje | İçerik | Dockerfile |
+Banka listesi [Banks.java](./reconciler/src/main/java/fast/reconciler/Banks.java) içindedir: 18 banka ve elektronik para kuruluşu.
+
+- **Kodun kaynağı:** `sender_bank` / `receiver_bank` alanı; boşsa IBAN'ın 5–9. haneleri.
+- **Listede olmayan kodlar** `other` olarak raporlanır. Bu, metrik sayısının sınırsız büyümesini önler.
+- **Enpara.com** QNB'nin kodunu (00111) kullandığı için ayırt edilemez; ikisi `QNB / Enpara.com` olarak birlikte görünür.
+
+## Ölçekleme
+
+Tüm uygulama servisleri `docker-compose.yml` içinde `deploy.replicas: 2` ile çalışır.
+
+| Servis | Nasıl dağılır | Not |
 |---|---|---|
-| `FastTransfer.Shared` | FAST modelleri, banka listesi, ortam değişkeni yardımcıları | — (kütüphane) |
-| `FastTransfer.Producer` | HTTP API → Kafka | [FastTransfer.Producer/Dockerfile](./dotnet/FastTransfer.Producer/Dockerfile) |
-| `FastTransfer.Consumer` | Kafka → metrikler, `transaction_id` eşleştirmesi | [FastTransfer.Consumer/Dockerfile](./dotnet/FastTransfer.Consumer/Dockerfile) |
+| `dotnet-producer` | Önünde `producer-lb` (nginx), tek giriş noktası http://localhost:18081 | nginx Docker DNS'i 5 sn'de bir yeniden çözer; replica eklenip çıkarılınca yeniden başlatma gerekmez. Yanıttaki `X-Upstream` header'ı isteği karşılayan replica'yı gösterir. |
+| `dotnet-consumer` | Aynı consumer group (`fast-transfer-consumers-dotnet`), cooperative-sticky assignor | Event'ler arası durum tutmadığı için atama şekli önemsizdir. Rebalance'lar kademeli olur. |
+| `fast-reconciler` | Kafka Streams task'ları instance'lara dağıtılır | State, partition ile birlikte taşınır (bkz. yukarı) |
 
-Compose'da her iki servis de `deploy.replicas: 2` ile çalışır:
+Replica sayısını değiştirmek için `deploy.replicas` değerini güncelleyin. Consumer (`2114-2115`) ve reconciler (`9400-9401`) için host port aralığını da genişletin. Partition sayısından (3) fazla consumer veya reconciler instance'ı boşta kalır.
 
-- **Producer (`dotnet-producer` ×2):** önünde `producer-lb` (nginx) vardır ve tek giriş noktası http://localhost:18081'dir. nginx, Docker DNS'i 5 saniyede bir yeniden çözer ve istekleri replica'lar arasında dağıtır. Yanıttaki `X-Upstream` header'ı, isteği hangi replica'nın karşıladığını gösterir.
-- **Consumer (`dotnet-consumer` ×2):** iki replica aynı consumer group'tadır (`fast-transfer-consumers-dotnet`), Kafka partition'ları aralarında paylaştırır. Bir transferin `fast_send`'i ile sonucunun aynı replica'ya düşmesi için iki koşul vardır:
-  1. Producer bütün event'leri `transaction_id` key'i ile yazar. Topic'lerin partition sayısı aynıdır (3), bu yüzden aynı transfer her topic'te aynı partition numarasına düşer.
-  2. Consumer **range** assignor kullanır. Bu assignor, her replica'ya her topic'te aynı partition numaralarını verir (ör. replica 1 → `[2]`, replica 2 → `[0, 1]`).
+## İzleme ve alarmlar
 
-  Topic'lere farklı partition sayısı verilirse bu garanti bozulur.
-- **Prometheus:** her replica'yı Docker DNS üzerinden (`dns_sd_configs`) ayrı ayrı scrape eder. Dashboard'lar replica'ları toplar; runtime panelleri replica başına çizgi gösterir.
+Grafana'da iki klasör vardır:
 
-Replica sayısını değiştirmek için `deploy.replicas` değerini güncelleyin. Consumer için host port aralığını (`2114-2115`) da büyütün. Partition sayısından (3) fazla consumer replica'sı boşta kalır.
+| Klasör | Dashboard | Kimin için |
+|---|---|---|
+| FAST | **FAST Operations** | İş / operasyon: hacim, başarı oranı, tamamlanma süresi, bankalar, para, alarmlar |
+| FAST | **FAST Services** | Uygulama ekibi: API, consumer replica'ları, runtime, loglar |
+| Kafka | **Kafka Consumer Groups & Broker** | Platform: lag, partition'lar, broker sağlığı |
+
+9 FAST alarmı vardır:
+
+- **Hacim:** mesai saatinde düşük `fast_send` veya sonuç hacmi; her zaman yüksek hacim.
+- **Hata:** başarısız sayısı ve `failed / success` oranı.
+- **Eşleşme:** sonucu gelmeyen transferler (send/outcome mismatch) ve 30 sn'den uzun bekleyen takılı transferler.
+- **Altyapı:** reconciler'ın çalışmaması.
+
+Her panelin ne gösterdiği ve neden konulduğu, alarmların eşikleri ve çaldığında nereye bakılacağı, verinin Grafana'ya nasıl geldiği ve yeni metrik, panel veya alarm eklemenin adımları **[dashboard.md](./dashboard.md)** içinde anlatılır.
+
+Alarmlar için henüz bildirim kanalı yok. Slack veya e-posta için Grafana'da bir contact point tanımlanmalıdır.
+
+## Yük ve alarm testleri
+
+Artillery senaryoları servisleri gereken duruma getirir, yükü gönderir ve rapor üretir (ör. consumer kapalıyken `fast_send` biriktirmek). Ayrıntılar: [performance/artillery/README.md](./performance/artillery/README.md).
 
 ```bash
-docker compose up -d --build dotnet-producer dotnet-consumer producer-lb
+cd performance/artillery
+npm install
+npm run test:both-open          # normal akış
+npm run test:fast-send-backlog  # consumer kapalı, fast_send birikir
+npm run test:no-fast-send       # sadece sonuç event'leri
+npm run test:missing-outcomes   # mismatch alarmını tetikler (8 dk)
 ```
 
-### Eski consumer group
-
-Projenin ilk sürümü Go ile yazılmıştı; git geçmişinde duruyor. O sürümün consumer group'u (`fast-transfer-consumers`) mevcut Kafka verisinde hâlâ duruyorsa lag'i büyür. Silmek için:
+k6 ile basit yük testi:
 
 ```bash
-docker compose exec kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --delete --group fast-transfer-consumers
-```
-
-## FAST alert'leri
-
-Alert'ler Grafana Alerting ile `FAST` klasöründe tanımlıdır ([fast-alerts.yml](./observability/grafana/provisioning/alerting/fast-alerts.yml)) ve `fast-transfer-consumers-dotnet` consumer group'u (tüm consumer replica'ları birlikte) için çalışır. Tüm sayılar group'un **son 5 dakikada** tükettiği event'lerdir. Kaynak, commit edilen Kafka offset'leridir (`kafka-exporter`), bu yüzden consumer restart'larından etkilenmez.
-
-| Alert | Koşul | Ne zaman | Severity | Süre |
-|---|---|---|---|---|
-| FAST send volume low (business hours) | `fast_send` < 100 | 09:00–18:00 (İstanbul) | warning | 5 dk |
-| FAST send volume high | `fast_send` > 6000 | Her zaman | critical | 5 dk |
-| FAST outcome volume low (business hours) | `success + failed` < 100 | 09:00–18:00 (İstanbul) | warning | 5 dk |
-| FAST outcome volume high | `success + failed` > 6000 | Her zaman | critical | 5 dk |
-| FAST failed count high | `fast_send_failed` > 500 | Her zaman | critical | 5 dk |
-| FAST failed/success ratio high | `failed / success` > %20 | Her zaman | critical | 5 dk |
-| FAST send/outcome mismatch | `\|send − outcome\| / send` > %10 | Her zaman | warning | 5 dk |
-
-- **Eşikleri değiştirmek:** [fast-alerts.yml](./observability/grafana/provisioning/alerting/fast-alerts.yml) içinde ilgili kuralın `params` değerini (ve `for` süresini) değiştirip Grafana'yı yeniden başlatın.
-- **Saat aralığını değiştirmek:** [rules/fast.yml](./observability/prometheus/rules/fast.yml) içindeki `fast:business_hours` kuralında `9` / `18` değerlerini değiştirin (UTC+3 sabit). Ardından `docker compose kill -s HUP prometheus` çalıştırın.
-- **Oranların hesaplanma şartı:** 5 dakikada 20 event'in altında oranlar hesaplanmaz, böylece düşük trafikte yanlış alarm oluşmaz.
-- **Consumer kapalıyken:** düşük hacim alert'leri mesai saatlerinde tetiklenir, çünkü group hiçbir şey tüketmez.
-- **Kullanılan recording rule'lar:** `fast:sent:increase5m`, `fast:outcome:increase5m`, `fast:success:increase5m`, `fast:failed:increase5m`, `fast:failed_success:ratio5m`, `fast:outcome_mismatch:ratio5m`, `fast:business_hours`.
-- **Bildirim:** Slack, e-posta vb. için Grafana'da bir contact point tanımlanmalıdır. Şu an alert'ler yalnızca Grafana'da ve dashboard'daki `FAST alerts` panelinde görünür.
-
-## Hazır imaj sürümleri
-
-Compose hazır imajları güncel kararlı sürümlere sabitlenmiştir: Apache Kafka 4.4.0, Prometheus 3.13.1, Grafana 13.3.0, Loki 3.7.9 ve Grafana Alloy 1.21.3. Uygulama imajları .NET 10 SDK / ASP.NET Core runtime ile derlenir; producer load balancer'ı nginx 1.29.3'tür.
-
-## Performans testi
-
- [k6](https://k6.io/) kuruluysa:
-
-```bash
-k6 run performance/producer.js
-```
-
-Varsayılan test 60 saniye boyunca saniyede 100 transfer üretir (her biri `fast_send` + `%90 fast_send_success` / `%10 fast_send_failed`). API adresini değiştirmek için `PRODUCER_URL` kullanılabilir:
-
-```bash
+k6 run performance/producer.js                                     # varsayılan: http://localhost:18081
 PRODUCER_URL=http://localhost:18081 k6 run performance/producer.js
 ```
 
-Artillery case'leri için [performance/artillery/README.md](./performance/artillery/README.md) dosyasına bakın. Producer host portu `18081`'dir.
+## İmaj sürümleri
 
-## Metrikler
+| Bileşen | Sürüm |
+|---|---|
+| Apache Kafka | 4.4.0 |
+| Prometheus | 3.13.1 |
+| Grafana | 13.3.0 |
+| Loki | 3.7.9 |
+| Grafana Alloy | 1.21.3 |
+| nginx | 1.29.3 |
+| kafka-exporter | 1.9.0 |
+| .NET | 10 (SDK / ASP.NET Core runtime) |
+| Java / Kafka Streams | 21 (Temurin) / 4.4.0 |
 
-- `producer_events_total{event}`: Kafka'ya başarıyla yazılan FAST event sayısı
-- `consumer_events_total{event}`: consumer tarafından okunan FAST event sayısı
-- `producer_fast_amount_try_total{event}`, `consumer_fast_amount_try_total{event}`: TRY tutar toplamları
-- `consumer_fast_failed_total{reason}`: başarısız transferlerin nedene göre dağılımı
-- `consumer_event_latency_seconds{event}`: Kafka'ya yazılma ile tüketilme arasındaki süre
-- `consumer_partition_events_total`, `consumer_last_offset`: partition bazında tüketim
-- `producer_errors_total{event,reason}`, `consumer_errors_total{reason}`: hata sayaçları
-- `producer_http_requests_total{endpoint,code}`, `producer_http_request_duration_seconds{endpoint}`: API istek sayısı ve süresi
-- `fast_transfer_completion_seconds{outcome}`: `fast_send` → sonuç süresi
-- `fast_transfers_pending`, `fast_transfers_pending_over_threshold`, `fast_outcomes_without_send`, `fast_transfers_expired_total{kind}`, `fast_duplicate_events_total{event}`: eşleştirme durumu
-- `consumer_fast_bank_events_total{event,role,bank_code,bank}`, `consumer_fast_bank_amount_try_total{...}`: banka bazında sayı ve TRY tutar
-- `consumer_fast_amount_try{event}`: tutar dağılımı (histogram)
-- `kafka_consumergroup_lag`, `kafka_consumergroup_current_offset`, `kafka_topic_partition_current_offset`, `kafka_consumergroup_members`: `kafka-exporter` (http://localhost:9308/metrics) üzerinden consumer group metrikleri
+## Notlar
 
-Uygulama sayaçları process yeniden başladığında sıfırlanır; kalıcı toplamlar için Kafka offset metrikleri kullanılır. Consumer'da gerçek iş mantığı yoktur; işleme adımı consumer döngüsüne eklenebilir.
+- Consumer'da gerçek iş mantığı yoktur. Transfer işleme adımı `ConsumerWorker.Handle` içine eklenebilir.
+- Reconciler'ın birim testlerini yerelde çalıştırmak için (JDK gerekmez): `docker build --target build reconciler/`.
+- Projenin ilk sürümü Go ile yazılmıştı; git geçmişinde duruyor. O sürümün consumer group'u (`fast-transfer-consumers`) Kafka verisinde kaldıysa silmek için:
+
+  ```bash
+  docker compose exec kafka /opt/kafka/bin/kafka-consumer-groups.sh \
+    --bootstrap-server localhost:9092 --delete --group fast-transfer-consumers
+  ```
