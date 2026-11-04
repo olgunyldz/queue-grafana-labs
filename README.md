@@ -125,15 +125,13 @@ Replica sayısını değiştirmek için `deploy.replicas` değerini güncelleyin
 docker compose up -d --build dotnet-producer dotnet-consumer producer-lb
 ```
 
-### Go implementasyonu
+### Eski consumer group
 
-İlk Go sürümü ([cmd/](./cmd/), [internal/](./internal/), kök [Dockerfile](./Dockerfile)) referans için repo'da duruyor, ancak compose'dan kaldırıldı. Onun eski consumer group'u (`fast-transfer-consumers`) Kafka'da kalmaya devam eder ve lag'i artık büyür. İstenirse silinebilir:
+Projenin ilk sürümü Go ile yazılmıştı; git geçmişinde duruyor. O sürümün consumer group'u (`fast-transfer-consumers`) mevcut Kafka verisinde hâlâ duruyorsa lag'i büyür. Silmek için:
 
 ```bash
 docker compose exec kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --delete --group fast-transfer-consumers
 ```
-
-Dashboard'lar uygulama metriklerini `impl="dotnet"` ile filtreler; Go'nun Prometheus'taki geçmiş verisi dashboard'larda gösterilmez.
 
 ## FAST alert'leri
 

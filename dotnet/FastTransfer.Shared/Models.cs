@@ -15,7 +15,7 @@ public static class FastEvents
     public static bool IsKnown(string name) => Array.IndexOf(All, name) >= 0;
 }
 
-/// <summary>FAST transfer payload accepted by the endpoints (same JSON shape as the Go service).</summary>
+/// <summary>FAST transfer payload accepted by the endpoints (snake_case JSON).</summary>
 public sealed class Transfer
 {
     public string TransactionId { get; set; } = "";
@@ -43,7 +43,7 @@ public sealed class FastEvent
 
 public static class Json
 {
-    /// <summary>snake_case, omit nulls — matches the Go service's JSON.</summary>
+    /// <summary>snake_case, omit nulls.</summary>
     public static readonly JsonSerializerOptions Options = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
@@ -56,7 +56,7 @@ public static class Env
     public static string Get(string key, string fallback) =>
         Environment.GetEnvironmentVariable(key) is { Length: > 0 } v ? v : fallback;
 
-    /// <summary>Go-style durations: "30s", "10m", "500ms", "1h".</summary>
+    /// <summary>Durations such as "30s", "10m", "500ms", "1h".</summary>
     public static TimeSpan Duration(string key, TimeSpan fallback)
     {
         var raw = Environment.GetEnvironmentVariable(key);

@@ -6,8 +6,8 @@ using Prometheus;
 namespace FastTransfer.Consumer;
 
 /// <summary>
-/// Consumes the FAST topics with its own consumer group and exposes /metrics and /healthz — the C# twin of
-/// cmd/consumer. Metric names match the Go consumer; Prometheus tells them apart by the job label.
+/// Consumes the FAST topics with the configured consumer group and exposes /metrics and /healthz.
+/// Several replicas can run in the same group; Prometheus scrapes each replica separately.
 /// </summary>
 public static class ConsumerApp
 {
@@ -90,9 +90,9 @@ public sealed class ConsumerWorker(ConsumerSettings settings, Matcher matcher, I
             BootstrapServers = settings.Broker,
             GroupId = settings.Group,
             ClientId = "fast-consumer-dotnet",
-            AutoOffsetReset = AutoOffsetReset.Earliest,  // a new group starts from the beginning, like kafka-go
+            AutoOffsetReset = AutoOffsetReset.Earliest,  // a new group starts from the beginning
             EnableAutoCommit = true,
-            AutoCommitIntervalMs = 1000,                  // same as CommitInterval: 1s in the Go consumer
+            AutoCommitIntervalMs = 1000,                  // commit offsets every second
             EnableAutoOffsetStore = true,
             // Several replicas share this group. The range assignor gives each replica the same partition
             // numbers on every topic, and the producer keys all events of a transfer by transaction_id, so a

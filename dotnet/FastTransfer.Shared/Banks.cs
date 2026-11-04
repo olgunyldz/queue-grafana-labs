@@ -1,7 +1,7 @@
 namespace FastTransfer.Shared;
 
 /// <summary>
-/// Bank codes (IBAN positions 5-9) mapped to display names. Mirrors internal/fast/banks.go.
+/// Bank codes (IBAN positions 5-9) mapped to display names.
 /// Enpara.com runs on QNB's infrastructure and shares code 00111, so the two are reported together.
 /// </summary>
 public static class Banks

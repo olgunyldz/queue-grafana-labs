@@ -4,7 +4,6 @@ namespace FastTransfer.Consumer;
 
 /// <summary>
 /// Pairs each fast_send with its outcome (fast_send_success / fast_send_failed) by transaction_id.
-/// C# port of cmd/consumer/matcher.go.
 ///
 /// The three topics are consumed in parallel, so an outcome can be read before its send. Both sides are
 /// buffered and the completion time is computed from the Kafka write timestamps, not from read order.

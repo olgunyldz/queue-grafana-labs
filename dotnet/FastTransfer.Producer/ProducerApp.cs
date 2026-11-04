@@ -8,7 +8,7 @@ using Prometheus;
 namespace FastTransfer.Producer;
 
 /// <summary>
-/// HTTP API that writes FAST events to Kafka — the C# twin of cmd/producer.
+/// HTTP API that writes FAST events to Kafka.
 /// POST /events/{fast_send|fast_send_success|fast_send_failed}; each event goes to the topic of the same name.
 /// </summary>
 public static class ProducerApp
@@ -41,7 +41,7 @@ public static class ProducerApp
             new ProducerBuilder<string, string>(new ProducerConfig
             {
                 BootstrapServers = broker,
-                Acks = Acks.Leader,          // same as kafka.RequireOne in the Go writer
+                Acks = Acks.Leader,          // wait for the partition leader only
                 LingerMs = 10,               // same as BatchTimeout: 10ms
                 Partitioner = Partitioner.Murmur2Random,
                 ClientId = "fast-producer-dotnet",
