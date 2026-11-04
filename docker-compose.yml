@@ -1,0 +1,163 @@
+services:
+  kafka:
+    image: apache/kafka:4.4.0
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:29093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_JMX_PORT: 9999
+      KAFKA_JMX_HOSTNAME: kafka
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  kafka-init:
+    image: apache/kafka:4.4.0
+    # One topic per FAST event: fast_send, fast_send_success, fast_send_failed
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        for topic in fast_send fast_send_success fast_send_failed; do
+          /opt/kafka/bin/kafka-topics.sh --create --if-not-exists --topic "$$topic" --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1
+        done
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  kafka-jmx-exporter:
+    image: bitnami/jmx-exporter:latest
+    command: ["5556", "/etc/jmx-exporter/config.yml"]
+    volumes:
+      - ./observability/kafka-jmx-exporter/config.yml:/etc/jmx-exporter/config.yml:ro
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.9.0
+    command:
+      - --kafka.server=kafka:9092
+      - --kafka.version=3.9.0
+      - --topic.filter=^[^_].*
+      - --group.filter=.*
+      - --offset.show-all
+    ports:
+      - "9308:9308"
+    restart: unless-stopped
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+
+  # FAST producer (C# / .NET 10), 2 replicas behind the producer-lb load balancer.
+  dotnet-producer:
+    build:
+      context: ./dotnet
+      dockerfile: FastTransfer.Producer/Dockerfile
+    image: fast-transfer-producer:local
+    deploy:
+      replicas: 2
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      HTTP_ADDR: http://0.0.0.0:8080
+    expose:
+      - "8080"
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+
+  # Single entry point for the producer replicas: http://localhost:18081
+  producer-lb:
+    image: nginx:1.29.3-alpine
+    volumes:
+      - ./observability/nginx/producer-lb.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "18081:8080"
+    depends_on:
+      - dotnet-producer
+
+  # FAST consumer (C# / .NET 10), 2 replicas in the same consumer group.
+  # Kafka splits the partitions between them (range assignor, see ConsumerApp.cs).
+  dotnet-consumer:
+    build:
+      context: ./dotnet
+      dockerfile: FastTransfer.Consumer/Dockerfile
+    image: fast-transfer-consumer:local
+    deploy:
+      replicas: 2
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPICS: fast_send,fast_send_success,fast_send_failed
+      KAFKA_GROUP: fast-transfer-consumers-dotnet
+      METRICS_ADDR: http://0.0.0.0:2114
+    ports:
+      # One host port per replica (2114 and 2115); Prometheus scrapes each replica via Docker DNS.
+      - "2114-2115:2114"
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+
+  prometheus:
+    image: prom/prometheus:v3.13.1
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/rules:/etc/prometheus/rules:ro
+    depends_on:
+      - dotnet-producer
+      - dotnet-consumer
+      - kafka-jmx-exporter
+      - kafka-exporter
+
+  loki:
+    image: grafana/loki:3.7.9
+    command: ["-config.file=/etc/loki/config.yml"]
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./observability/loki/config.yml:/etc/loki/config.yml:ro
+      - loki-data:/loki
+
+  alloy:
+    image: grafana/alloy:v1.21.3
+    command: ["run", "/etc/alloy/config.alloy", "--storage.path=/var/lib/alloy/data"]
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy/data
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:13.3.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+      - loki
+
+volumes:
+  loki-data:
+  alloy-data:

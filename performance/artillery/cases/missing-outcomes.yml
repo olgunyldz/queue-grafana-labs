@@ -1,0 +1,59 @@
+# Alert test: fast_send is sent for every transfer, but ~25% of the transfers
+# never get an outcome (no fast_send_success / fast_send_failed).
+# Runs 8 minutes so the "FAST send/outcome mismatch" alert
+# (> 10% difference for 5 minutes) goes pending, then firing.
+config:
+  target: http://localhost:18081
+  processor: ../processors/fast.cjs
+  plugins:
+    expect: {}
+  phases:
+    - name: missing-outcomes
+      duration: 480
+      arrivalRate: 10
+  http:
+    timeout: 10
+
+scenarios:
+  - name: send-then-success
+    weight: 65
+    flow:
+      - function: newTransfer
+      - post:
+          url: /events/fast_send
+          beforeRequest: fastBody
+          expect:
+            - statusCode: 202
+      - think: 0.2
+      - post:
+          url: /events/fast_send_success
+          beforeRequest: fastBody
+          expect:
+            - statusCode: 202
+
+  - name: send-then-failed
+    weight: 10
+    flow:
+      - function: newTransfer
+      - post:
+          url: /events/fast_send
+          beforeRequest: fastBody
+          expect:
+            - statusCode: 202
+      - think: 0.2
+      - post:
+          url: /events/fast_send_failed
+          beforeRequest: fastBody
+          expect:
+            - statusCode: 202
+
+  # No outcome is ever sent for these transfers.
+  - name: send-without-outcome
+    weight: 25
+    flow:
+      - function: newTransfer
+      - post:
+          url: /events/fast_send
+          beforeRequest: fastBody
+          expect:
+            - statusCode: 202

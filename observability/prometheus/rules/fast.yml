@@ -1,0 +1,67 @@
+# FAST send ↔ outcome reconciliation per consumer group.
+#
+# Counts come from the consumer group's committed offsets (kafka-exporter), so
+# they are durable across consumer restarts and are scoped to one group:
+#   sent    = fast_send messages the group consumed in the last 5 minutes
+#   outcome = fast_send_success + fast_send_failed messages consumed in the last 5 minutes
+#   mismatch ratio = |sent - outcome| / sent
+#
+# A ratio above 0.10 means more than 10% of the sends have no outcome (or there
+# are outcomes without a send). The Grafana alert "FAST send/outcome mismatch"
+# fires when this stays above 10% for 5 minutes.
+groups:
+  - name: fast-reconciliation
+    interval: 15s
+    rules:
+      - record: fast:sent:increase5m
+        expr: |
+          sum by (consumergroup) (
+            increase(kafka_consumergroup_current_offset{topic="fast_send"}[5m])
+          )
+
+      - record: fast:outcome:increase5m
+        expr: |
+          sum by (consumergroup) (
+            increase(kafka_consumergroup_current_offset{topic=~"fast_send_success|fast_send_failed"}[5m])
+          )
+
+      # Only evaluated when there is enough traffic (>= 20 events in 5m), so a
+      # single unanswered send at low volume does not count as a 100% mismatch.
+      # When sent = 0 but outcomes exist, the ratio is large (outcome / 1).
+      - record: fast:outcome_mismatch:ratio5m
+        expr: |
+          (
+            abs(fast:sent:increase5m - fast:outcome:increase5m)
+            / clamp_min(fast:sent:increase5m, 1)
+          )
+          and on (consumergroup)
+          (fast:sent:increase5m + fast:outcome:increase5m) >= 20
+
+      # ---- Per-outcome counts and failure ratio --------------------------
+      - record: fast:success:increase5m
+        expr: |
+          sum by (consumergroup) (
+            increase(kafka_consumergroup_current_offset{topic="fast_send_success"}[5m])
+          )
+
+      - record: fast:failed:increase5m
+        expr: |
+          sum by (consumergroup) (
+            increase(kafka_consumergroup_current_offset{topic="fast_send_failed"}[5m])
+          )
+
+      # failed / success over the last 5 minutes; only when >= 20 outcomes.
+      - record: fast:failed_success:ratio5m
+        expr: |
+          (fast:failed:increase5m / clamp_min(fast:success:increase5m, 1))
+          and on (consumergroup)
+          fast:outcome:increase5m >= 20
+
+      # ---- Business hours (Europe/Istanbul, UTC+3, no DST) ---------------
+      # 1 between 09:00 and 18:00 Istanbul time, 0 otherwise.
+      # Change 9 / 18 here to move the window used by the low-volume alerts.
+      - record: fast:business_hours
+        expr: |
+          (hour(vector(time() + 3 * 3600)) >= bool 9)
+          *
+          (hour(vector(time() + 3 * 3600)) < bool 18)

@@ -1,0 +1,37 @@
+# No fast_send: producer and consumer are up, but only outcome events
+# (fast_send_success / fast_send_failed) are sent. The fast_send topic stays flat.
+config:
+  target: http://localhost:18081
+  processor: ../processors/fast.cjs
+  plugins:
+    expect: {}
+  phases:
+    - name: warmup
+      duration: 15
+      arrivalRate: 2
+    - name: outcomes-only
+      duration: 60
+      arrivalRate: 20
+  http:
+    timeout: 10
+
+scenarios:
+  - name: success-without-fast-send
+    weight: 8
+    flow:
+      - function: newTransfer
+      - post:
+          url: /events/fast_send_success
+          beforeRequest: fastBody
+          expect:
+            - statusCode: 202
+
+  - name: failed-without-fast-send
+    weight: 2
+    flow:
+      - function: newTransfer
+      - post:
+          url: /events/fast_send_failed
+          beforeRequest: fastBody
+          expect:
+            - statusCode: 202

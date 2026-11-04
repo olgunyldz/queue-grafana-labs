@@ -1,0 +1,24 @@
+# .NET build output
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+
+# Node / Artillery
+node_modules/
+performance/artillery/reports/*
+!performance/artillery/reports/.gitkeep
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local environment overrides
+.env
+.env.*
+docker-compose.override.yml

@@ -1,0 +1,25 @@
+config:
+  target: http://localhost:2114
+  plugins:
+    expect: {}
+  phases:
+    - name: consumer-health-check
+      duration: 30
+      arrivalRate: 2
+    - name: consumer-metrics-check
+      duration: 30
+      arrivalRate: 5
+  http:
+    timeout: 10
+
+scenarios:
+  - name: consumer-without-producer
+    flow:
+      - get:
+          url: /healthz
+          expect:
+            - statusCode: 200
+      - get:
+          url: /metrics
+          expect:
+            - statusCode: 200

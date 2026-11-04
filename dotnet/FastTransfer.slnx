@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="FastTransfer.Shared/FastTransfer.Shared.csproj" />
+  <Project Path="FastTransfer.Producer/FastTransfer.Producer.csproj" />
+  <Project Path="FastTransfer.Consumer/FastTransfer.Consumer.csproj" />
+</Solution>

@@ -1,0 +1,53 @@
+# Normal FAST flow: producer and consumer are both up.
+# Every transfer sends fast_send, then its outcome (90% success, 10% failed).
+config:
+  target: http://localhost:18081
+  processor: ../processors/fast.cjs
+  plugins:
+    expect: {}
+  phases:
+    - name: warmup
+      duration: 15
+      arrivalRate: 2
+    - name: ramp-up
+      duration: 30
+      arrivalRate: 5
+      rampTo: 40
+    - name: steady-state
+      duration: 60
+      arrivalRate: 40
+  http:
+    timeout: 10
+
+scenarios:
+  - name: fast-send-success
+    weight: 9
+    flow:
+      - function: newTransfer
+      - post:
+          url: /events/fast_send
+          beforeRequest: fastBody
+          expect:
+            - statusCode: 202
+      - think: 0.2
+      - post:
+          url: /events/fast_send_success
+          beforeRequest: fastBody
+          expect:
+            - statusCode: 202
+
+  - name: fast-send-failed
+    weight: 1
+    flow:
+      - function: newTransfer
+      - post:
+          url: /events/fast_send
+          beforeRequest: fastBody
+          expect:
+            - statusCode: 202
+      - think: 0.2
+      - post:
+          url: /events/fast_send_failed
+          beforeRequest: fastBody
+          expect:
+            - statusCode: 202
