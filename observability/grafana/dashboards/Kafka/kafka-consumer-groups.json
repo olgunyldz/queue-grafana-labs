@@ -109,10 +109,10 @@
         },
         "definition": "label_values(kafka_topic_partitions, topic)",
         "refresh": 2,
-        "regex": "/^fast_send.*/",
+        "regex": "/^fast_(send|transfer).*/",
         "includeAll": true,
         "multi": true,
-        "allValue": "fast_send.*",
+        "allValue": "fast_(send|transfer).*",
         "current": {
           "text": "All",
           "value": "$__all"

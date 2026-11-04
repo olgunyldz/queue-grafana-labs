@@ -22,3 +22,6 @@ Thumbs.db
 .env
 .env.*
 docker-compose.override.yml
+
+
+target/

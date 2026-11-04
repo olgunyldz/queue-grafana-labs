@@ -95,9 +95,9 @@
         "name": "service",
         "type": "custom",
         "label": "Service",
-        "query": "dotnet-producer,dotnet-consumer,producer-lb",
+        "query": "dotnet-producer,dotnet-consumer,fast-reconciler,producer-lb",
         "includeAll": true,
-        "allValue": "dotnet-producer|dotnet-consumer|producer-lb",
+        "allValue": "dotnet-producer|dotnet-consumer|fast-reconciler|producer-lb",
         "multi": false,
         "current": {
           "text": "All",
@@ -1051,73 +1051,6 @@
     {
       "id": 18,
       "type": "timeseries",
-      "title": "Waiting transfers per replica",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 0,
-        "y": 30
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "expr": "sum by (instance) (fast_transfers_pending{impl=\"dotnet\", job=\"dotnet-consumer\"})",
-          "legendFormat": "waiting · {{instance}}"
-        },
-        {
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "expr": "sum by (instance) (fast_outcomes_without_send{impl=\"dotnet\", job=\"dotnet-consumer\"})",
-          "legendFormat": "outcome without send · {{instance}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 12,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            }
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "max",
-            "mean"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "description": "Matching state lives in each replica's memory."
-    },
-    {
-      "id": 19,
-      "type": "timeseries",
       "title": "Consumer errors / s",
       "datasource": {
         "type": "prometheus",
@@ -1125,8 +1058,8 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 12,
-        "x": 12,
+        "w": 24,
+        "x": 0,
         "y": 30
       },
       "targets": [
@@ -1173,9 +1106,9 @@
       }
     },
     {
-      "id": 20,
+      "id": 19,
       "type": "row",
-      "title": "Runtime (per replica)",
+      "title": "Reconciler (Kafka Streams)",
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -1186,7 +1119,675 @@
       "panels": []
     },
     {
+      "id": 20,
+      "type": "stat",
+      "title": "Instances RUNNING",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 38
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "count(kafka_stream_client_state{job=\"fast-reconciler\"} == 2) or vector(0)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "green",
+                "value": 2
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "description": "Kafka Streams client state RUNNING (2 = both instances)."
+    },
+    {
       "id": 21,
+      "type": "stat",
+      "title": "Input lag",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 38
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(kafka_consumergroup_lag{consumergroup=\"fast-reconciler\", topic=~\"fast_send.*\"}) or vector(0)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 1000
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "description": "FAST events not yet read by the reconciler."
+    },
+    {
+      "id": 22,
+      "type": "stat",
+      "title": "Restore remaining",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 38
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(kafka_stream_task_restore_remaining_records_total{job=\"fast-reconciler\"}) or vector(0)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "description": "Changelog records still to restore after a rebalance (state moving between instances)."
+    },
+    {
+      "id": 23,
+      "type": "stat",
+      "title": "Failed stream threads",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 38
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(kafka_stream_failed_stream_threads_total{job=\"fast-reconciler\"}) or vector(0)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "description": "Threads that crashed (they are replaced automatically)."
+    },
+    {
+      "id": 24,
+      "type": "stat",
+      "title": "In-flight transfers",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 38
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(fast_reconciler_pending{job=\"fast-reconciler\"}) + sum(fast_reconciler_orphan_outcomes{job=\"fast-reconciler\"})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "description": "Entries in the state store waiting for their other half."
+    },
+    {
+      "id": 25,
+      "type": "stat",
+      "title": "Stuck (> 30s)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 38
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(fast_reconciler_stuck{job=\"fast-reconciler\"})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 26,
+      "type": "timeseries",
+      "title": "Records processed / s per instance",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 42
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (instance) (rate(kafka_stream_task_process_total{job=\"fast-reconciler\"}[1m]))",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Both sub-topologies (input -> repartition, repartition -> matcher)."
+    },
+    {
+      "id": 27,
+      "type": "timeseries",
+      "title": "Reconciler lag by topic",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 42
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (topic) (kafka_consumergroup_lag{consumergroup=\"fast-reconciler\"})",
+          "legendFormat": "{{topic}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Includes the internal repartition topic."
+    },
+    {
+      "id": 28,
+      "type": "timeseries",
+      "title": "Commit / scan latency",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 42
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (instance) (kafka_stream_thread_commit_latency_avg{job=\"fast-reconciler\"}) / 1000",
+          "legendFormat": "commit · {{instance}}"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "max by (instance) (kafka_stream_task_punctuate_latency_avg{job=\"fast-reconciler\"}) / 1000",
+          "legendFormat": "scan · {{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Commit = exactly-once transaction commit. Scan = the periodic state scan (stuck / expiry)."
+    },
+    {
+      "id": 29,
+      "type": "timeseries",
+      "title": "In-flight transfers per instance",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 50
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (instance) (fast_reconciler_pending{job=\"fast-reconciler\"})",
+          "legendFormat": "waiting · {{instance}}"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (instance) (fast_reconciler_orphan_outcomes{job=\"fast-reconciler\"})",
+          "legendFormat": "outcome without send · {{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Moves between instances when tasks are reassigned (scale up / down)."
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "JVM heap per instance",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 50
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (instance) (jvm_memory_used_bytes{job=\"fast-reconciler\", area=\"heap\"})",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 31,
+      "type": "row",
+      "title": "Runtime (per replica)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 57
+      },
+      "panels": []
+    },
+    {
+      "id": 32,
       "type": "timeseries",
       "title": "Managed heap",
       "datasource": {
@@ -1197,7 +1798,7 @@
         "h": 7,
         "w": 6,
         "x": 0,
-        "y": 38
+        "y": 58
       },
       "targets": [
         {
@@ -1244,7 +1845,7 @@
       "description": ".NET GC heap size."
     },
     {
-      "id": 22,
+      "id": 33,
       "type": "timeseries",
       "title": "Working set",
       "datasource": {
@@ -1255,7 +1856,7 @@
         "h": 7,
         "w": 6,
         "x": 6,
-        "y": 38
+        "y": 58
       },
       "targets": [
         {
@@ -1302,7 +1903,7 @@
       "description": "Process memory (RSS)."
     },
     {
-      "id": 23,
+      "id": 34,
       "type": "timeseries",
       "title": "CPU",
       "datasource": {
@@ -1313,7 +1914,7 @@
         "h": 7,
         "w": 6,
         "x": 12,
-        "y": 38
+        "y": 58
       },
       "targets": [
         {
@@ -1360,7 +1961,7 @@
       "description": "CPU seconds per second (1.0 = one full core)."
     },
     {
-      "id": 24,
+      "id": 35,
       "type": "timeseries",
       "title": "GC collections / s",
       "datasource": {
@@ -1371,7 +1972,7 @@
         "h": 7,
         "w": 6,
         "x": 18,
-        "y": 38
+        "y": 58
       },
       "targets": [
         {
@@ -1417,7 +2018,7 @@
       }
     },
     {
-      "id": 25,
+      "id": 36,
       "type": "row",
       "title": "Logs",
       "collapsed": false,
@@ -1425,12 +2026,12 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 45
+        "y": 65
       },
       "panels": []
     },
     {
-      "id": 26,
+      "id": 37,
       "type": "timeseries",
       "title": "Error / warning log lines per minute",
       "datasource": {
@@ -1441,7 +2042,7 @@
         "h": 9,
         "w": 8,
         "x": 0,
-        "y": 46
+        "y": 66
       },
       "targets": [
         {
@@ -1450,7 +2051,7 @@
             "type": "loki",
             "uid": "${loki}"
           },
-          "expr": "sum by (container) (count_over_time({container=~\".*dotnet-(producer|consumer).*\"} |~ \"(?i)(fail|error|warn|crit)\" [1m]))",
+          "expr": "sum by (container) (count_over_time({container=~\".*(dotnet-producer|dotnet-consumer|fast-reconciler).*\"} |~ \"(?i)(fail|error|warn|crit)\" [1m]))",
           "legendFormat": "{{container}}"
         }
       ],
@@ -1487,7 +2088,7 @@
       }
     },
     {
-      "id": 27,
+      "id": 38,
       "type": "logs",
       "title": "Error / warning logs",
       "datasource": {
@@ -1498,7 +2099,7 @@
         "h": 9,
         "w": 16,
         "x": 8,
-        "y": 46
+        "y": 66
       },
       "targets": [
         {
@@ -1507,7 +2108,7 @@
             "type": "loki",
             "uid": "${loki}"
           },
-          "expr": "{container=~\".*dotnet-(producer|consumer).*\"} |~ \"(?i)(fail|error|warn|crit)\""
+          "expr": "{container=~\".*(dotnet-producer|dotnet-consumer|fast-reconciler).*\"} |~ \"(?i)(fail|error|warn|crit)\""
         }
       ],
       "fieldConfig": {
@@ -1522,7 +2123,7 @@
       }
     },
     {
-      "id": 28,
+      "id": 39,
       "type": "logs",
       "title": "All service logs",
       "datasource": {
@@ -1533,7 +2134,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 55
+        "y": 75
       },
       "targets": [
         {

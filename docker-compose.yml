@@ -27,12 +27,13 @@ services:
 
   kafka-init:
     image: apache/kafka:4.4.0
-    # One topic per FAST event: fast_send, fast_send_success, fast_send_failed
+    # One topic per FAST event (fast_send, fast_send_success, fast_send_failed) and the reconciler's
+    # result topics (fast_transfer_matched, fast_transfer_unmatched).
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         set -e
-        for topic in fast_send fast_send_success fast_send_failed; do
+        for topic in fast_send fast_send_success fast_send_failed fast_transfer_matched fast_transfer_unmatched; do
           /opt/kafka/bin/kafka-topics.sh --create --if-not-exists --topic "$$topic" --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1
         done
     depends_on:
@@ -111,6 +112,28 @@ services:
       kafka-init:
         condition: service_completed_successfully
 
+  # FAST reconciler (Java / Kafka Streams): matches fast_send with its outcome by transaction_id and
+  # produces the FAST business metrics. State is in RocksDB + a changelog topic, so instances can be
+  # added, removed or restarted without losing in-flight transfers (one standby replica per task).
+  fast-reconciler:
+    build: ./reconciler
+    image: fast-reconciler:local
+    deploy:
+      replicas: 2
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      APPLICATION_ID: fast-reconciler
+      FAST_PENDING_THRESHOLD: 30s
+      FAST_MATCH_TTL: 10m
+      NUM_STANDBY_REPLICAS: "1"
+      PROCESSING_GUARANTEE: exactly_once_v2
+      METRICS_PORT: "9400"
+    ports:
+      - "9400-9401:9400"
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+
   prometheus:
     image: prom/prometheus:v3.13.1
     ports:
@@ -121,6 +144,7 @@ services:
     depends_on:
       - dotnet-producer
       - dotnet-consumer
+      - fast-reconciler
       - kafka-jmx-exporter
       - kafka-exporter
 
