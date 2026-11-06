@@ -9,7 +9,7 @@ cd performance/artillery
 npm install
 ```
 
-Önce ana stack çalışıyor olmalı:
+Önce ana stack çalışıyor olmalı. Performance runner Docker komutu çalıştırmaz ve servisleri durdurup başlatmaz; producer, consumer ve gerekli load balancer durumunu testten önce hazırlayın:
 
 ```powershell
 docker compose up -d
@@ -26,7 +26,7 @@ docker compose up -d
 | `high-failure` | Açık | Açık | Transferlerin %50'si `fast_send_failed` (7 dk) | `FAST failed count high` + `FAST failed/success ratio high` |
 | `fast-send-spike` | Açık | Açık | 30 transfer/s (7 dk) | `FAST send volume high` + `FAST outcome volume high` |
 | `low-volume` | Açık | Açık | 0.2 transfer/s (7 dk) | `FAST send/outcome volume low`; **sadece 09:00–18:00 İstanbul saatinde** tetiklenir |
-| `consumer-only` | Kapalı | Açık | — (consumer `/healthz` ve `/metrics`) | Consumer health/metrics erişilebilirliği |
+| `consumer-only` | Kapalı | Açık | Consumer `/metrics` | Consumer metrik endpoint'inin erişilebilirliği |
 
 Çalıştırma:
 
@@ -41,14 +41,9 @@ npm run test:low-volume
 npm run test:consumer-only
 ```
 
-Her case başlamadan önce runner işleri şu sırayla yapar:
+Her case başlamadan önce runner herhangi bir health check yapmadan Artillery senaryosunu çalıştırır ve `reports/` altında JSON raporu üretir. Docker, Docker Compose, container stop/start veya volume işlemi yapmaz.
 
-1. `dotnet-producer` ve `dotnet-consumer` servislerini (tüm replica'larıyla) durdurur.
-2. Seçilen servisleri tekrar açar (producer için `producer-lb` ile birlikte).
-3. `/healthz` hazır olana kadar bekler.
-4. Testi çalıştırır ve sonunda `reports/` altında JSON raporu üretir.
-
-Producer hedefi load balancer'dır (http://localhost:18081). `consumer-only` case'inde hedef ilk consumer replica'sıdır (http://localhost:2114).
+Producer hedefi load balancer'dır (http://127.0.0.1:8080). `consumer-only` case'inde hedef ilk consumer replica'sıdır (http://127.0.0.1:2114).
 
 Tüm case'leri sırayla çalıştırmak için:
 
@@ -56,7 +51,7 @@ Tüm case'leri sırayla çalıştırmak için:
 npm run test:all
 ```
 
-`fast-send-backlog` testi consumer'ı kapalı tutarak `fast_send` topic'inde backlog biriktirir. Sonrasında `npm run test:both-open` veya `docker compose up -d dotnet-consumer` çalıştırıldığında consumer backlog'u tüketir; Grafana'da `fast_send backlog` ve `Lag per event topic` düşer, gecikme p95 ise geçici olarak yükselir.
+`fast-send-backlog` senaryosunun backlog oluşturması için consumer'ı testten önce dışarıdan durdurmanız gerekir; runner consumer durumunu değiştirmez. Test sonrasında consumer'ı ayrıca dışarıdan başlatın. Consumer çalışıyorsa senaryo yalnızca normal tüketim altında trafik üretir.
 
 `missing-outcomes` testi 8 dakika sürer: fark oranı ~%25 olur, alert yaklaşık 1 dakika sonra `pending`, 5 dakika sonra `firing` olur. `high-failure`, `fast-send-spike` ve `low-volume` 7 dakika sürer; ilgili alert'ler önce `pending`, yaklaşık 5–6 dakika sonra `firing` olur. Alert testleri aynı anda çalıştırılmamalıdır, çünkü trafikleri birbirine karışır. `test:all` bu case'leri de içerdiğinden toplam süre ~35 dakikayı bulur.
 

@@ -1,7 +1,7 @@
 # fast_send backlog: consumer is stopped, only fast_send is sent.
 # Lag on the fast_send topic grows; it drains once the consumer starts again.
 config:
-  target: http://localhost:18081
+  target: http://127.0.0.1:8080
   processor: ../processors/fast.cjs
   plugins:
     expect: {}

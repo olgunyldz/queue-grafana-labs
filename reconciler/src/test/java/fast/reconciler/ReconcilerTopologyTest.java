@@ -71,7 +71,7 @@ class ReconcilerTopologyTest {
         assertEquals("tx-1", out.get("transaction_id").asText());
         assertEquals("fast_send_success", out.get("outcome").asText());
         assertEquals(800, out.get("completion_ms").asLong());
-        assertEquals("Ziraat Bankası", out.get("sender_bank_name").asText());
+        assertEquals("Ziraat Bankas\u0131", out.get("sender_bank_name").asText());
         assertEquals("Akbank", out.get("receiver_bank_name").asText());
         assertTrue(unmatched.isEmpty());
     }
@@ -93,14 +93,14 @@ class ReconcilerTopologyTest {
         send.pipeInput("tx-3", event("fast_send", "tx-3", 10, ""), T0);
 
         driver.advanceWallClockTime(Duration.ofSeconds(40));
-        assertEquals(1.0, registry.get("fast.reconciler.stuck").gauge().value());
+        assertEquals(1.0, registry.get("fast.kstreams.reconciler.stuck").gauge().value());
         assertTrue(unmatched.isEmpty());
 
         driver.advanceWallClockTime(Duration.ofMinutes(10));
         JsonNode out = JSON.readTree(unmatched.readValue());
         assertEquals("send_without_outcome", out.get("kind").asText());
-        assertEquals(0.0, registry.get("fast.reconciler.pending").gauge().value());
-        assertEquals(1.0, registry.get("fast.reconciler.unmatched").tag("kind", "send_without_outcome").counter().count());
+        assertEquals(0.0, registry.get("fast.kstreams.reconciler.pending").gauge().value());
+        assertEquals(1.0, registry.get("fast.kstreams.reconciler.unmatched").tag("kind", "send_without_outcome").counter().count());
         assertTrue(matched.isEmpty());
     }
 
@@ -108,6 +108,6 @@ class ReconcilerTopologyTest {
     void countsDuplicates() {
         send.pipeInput("tx-4", event("fast_send", "tx-4", 10, ""), T0);
         send.pipeInput("tx-4", event("fast_send", "tx-4", 10, ""), T0.plusMillis(5));
-        assertEquals(1.0, registry.get("fast.reconciler.duplicates").tag("event", "fast_send").counter().count());
+        assertEquals(1.0, registry.get("fast.kstreams.reconciler.duplicates").tag("event", "fast_send").counter().count());
     }
 }

@@ -272,7 +272,7 @@ groups:
             datasourceUid: PBFA97CFB590B2093
             model:
               refId: A
-              expr: 'sum(fast_reconciler_stuck{job="fast-reconciler"})'
+              expr: 'sum(fast_kstreams_reconciler_stuck{job="fast-reconciler"})'
               instant: true
               range: false
               intervalMs: 1000

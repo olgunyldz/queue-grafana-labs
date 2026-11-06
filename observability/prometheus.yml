@@ -31,6 +31,92 @@ scrape_configs:
         type: A
         port: 9400
         refresh_interval: 10s
+    relabel_configs:
+      - target_label: impl
+        replacement: kstreams
+  - job_name: flink-reconciler
+    dns_sd_configs:
+      - names: [flink-taskmanager]
+        type: A
+        port: 9249
+        refresh_interval: 10s
+    relabel_configs:
+      - target_label: impl
+        replacement: flink
+      - target_label: flink_component
+        replacement: taskmanager
+    # Flink's Prometheus reporter embeds MetricGroup dimensions in the
+    # metric name. Normalize them back to the shared FAST metric contract so
+    # the Flink and Kafka Streams dashboards use the same PromQL.
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_outcome_role_bank_code_bank_transfers_total
+        target_label: __name__
+        replacement: fast_kstreams_reconciler_transfers_total
+      - source_labels: [__name__]
+        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_outcome_role_bank_code_bank_volume_try_total
+        target_label: __name__
+        replacement: fast_kstreams_reconciler_volume_try_total
+      - source_labels: [__name__]
+        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_outcome_sender_bank_completion_seconds_(bucket|count|sum)
+        target_label: __name__
+        replacement: fast_kstreams_reconciler_completion_seconds_$1
+      - source_labels: [__name__]
+        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_outcome_sender_bank_le_completion_seconds_bucket
+        target_label: __name__
+        replacement: fast_kstreams_reconciler_completion_seconds_bucket
+      - source_labels: [__name__]
+        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_outcome_amount_try_(count|sum)
+        target_label: __name__
+        replacement: fast_kstreams_reconciler_amount_try_$1
+      - source_labels: [__name__]
+        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_outcome_le_amount_try_bucket
+        target_label: __name__
+        replacement: fast_kstreams_reconciler_amount_try_bucket
+      - source_labels: [__name__]
+        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_reason_failures_total
+        target_label: __name__
+        replacement: fast_kstreams_reconciler_failures_total
+      - source_labels: [__name__]
+        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_.*_unmatched_total
+        target_label: __name__
+        replacement: fast_kstreams_reconciler_unmatched_total
+      - source_labels: [__name__]
+        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_.*_duplicates_total
+        target_label: __name__
+        replacement: fast_kstreams_reconciler_duplicates_total
+      - source_labels: [__name__]
+        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_pending
+        target_label: __name__
+        replacement: fast_kstreams_reconciler_pending
+      - source_labels: [__name__]
+        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_stuck
+        target_label: __name__
+        replacement: fast_kstreams_reconciler_stuck
+      - source_labels: [__name__]
+        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_orphan_outcomes
+        target_label: __name__
+        replacement: fast_kstreams_reconciler_orphan_outcomes
+      # Flink sanitizes decimal bucket labels (0.05 -> 0_05, +Inf -> _Inf).
+      - source_labels: [le]
+        regex: '([0-9]+)_([0-9]+)'
+        target_label: le
+        replacement: '$1.$2'
+      - source_labels: [le]
+        regex: _Inf
+        target_label: le
+        replacement: +Inf
+  - job_name: flink-jobmanager
+    dns_sd_configs:
+      - names: [flink-jobmanager]
+        type: A
+        port: 9249
+        refresh_interval: 10s
+    relabel_configs:
+      - target_label: impl
+        replacement: flink
+      - target_label: flink_component
+        replacement: jobmanager
   - job_name: kafka
     static_configs:
       - targets: [kafka-jmx-exporter:5556]

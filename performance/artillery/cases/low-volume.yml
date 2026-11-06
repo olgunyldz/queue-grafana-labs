@@ -2,7 +2,7 @@
 # Run it between 09:00 and 18:00 Istanbul time -> "FAST send volume low" and
 # "FAST outcome volume low". Outside business hours these alerts stay Normal.
 config:
-  target: http://localhost:18081
+  target: http://127.0.0.1:8080
   processor: ../processors/fast.cjs
   plugins:
     expect: {}

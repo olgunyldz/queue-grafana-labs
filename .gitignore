@@ -25,3 +25,9 @@ docker-compose.override.yml
 
 
 target/
+
+# Docker Compose persistent data (kept under the project for local runs).
+volumes/**
+!volumes/
+!volumes/**/
+!volumes/**/.gitkeep

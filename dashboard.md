@@ -1,32 +1,32 @@
 # Dashboard'lar ve alarmlar
 
-Bu doküman FAST transfer akışının Grafana'da nasıl izlendiğini anlatır. Üç konuyu kapsar:
+Bu dokÃ¼man FAST transfer akÄ±ÅŸÄ±nÄ±n Grafana'da nasÄ±l izlendiÄŸini anlatÄ±r. ÃœÃ§ konuyu kapsar:
 
-1. Verinin Grafana'ya nasıl geldiği.
-2. Her dashboard'un ve panelin ne gösterdiği, neden konulduğu.
-3. Alarmların ne zaman, neden çaldığı ve çaldığında nereye bakılacağı.
+1. Verinin Grafana'ya nasÄ±l geldiÄŸi.
+2. Her dashboard'un ve panelin ne gÃ¶sterdiÄŸi, neden konulduÄŸu.
+3. AlarmlarÄ±n ne zaman, neden Ã§aldÄ±ÄŸÄ± ve Ã§aldÄ±ÄŸÄ±nda nereye bakÄ±lacaÄŸÄ±.
 
-Grafana: http://localhost:3000 (admin/admin). Dashboard'lar `FAST` ve `Kafka` klasörlerindedir. Her dashboard'un sağ üstündeki **FAST lab** menüsü diğerlerine geçiş sağlar (zaman aralığı korunur).
+Grafana: http://localhost:3000 (admin/admin). Dashboard'lar `FAST` ve `Kafka` klasÃ¶rlerindedir. Her dashboard'un saÄŸ Ã¼stÃ¼ndeki **FAST lab** menÃ¼sÃ¼ diÄŸerlerine geÃ§iÅŸ saÄŸlar (zaman aralÄ±ÄŸÄ± korunur).
 
-- [1. Veri Grafana'ya nasıl geliyor](#1-veri-grafanaya-nasıl-geliyor)
+- [1. Veri Grafana'ya nasÄ±l geliyor](#1-veri-grafanaya-nasÄ±l-geliyor)
 - [2. Dashboard'lar](#2-dashboardlar)
   - [FAST Operations](#fast-operations)
   - [FAST Services](#fast-services)
   - [Kafka Consumer Groups & Broker](#kafka-consumer-groups--broker)
 - [3. Alarmlar](#3-alarmlar)
 - [4. Yeni metrik, panel veya alarm eklemek](#4-yeni-metrik-panel-veya-alarm-eklemek)
-- [5. Bilinen kısıtlar](#5-bilinen-kısıtlar)
+- [5. Bilinen kÄ±sÄ±tlar](#5-bilinen-kÄ±sÄ±tlar)
 
 ---
 
-## 1. Veri Grafana'ya nasıl geliyor
+## 1. Veri Grafana'ya nasÄ±l geliyor
 
 ```mermaid
 flowchart LR
     subgraph App["Uygulama"]
-        P["dotnet-producer ×2 (C#)<br/>/metrics :8080"]
-        C["dotnet-consumer ×2 (C#)<br/>/metrics :2114"]
-        R["fast-reconciler ×2 (Java, Kafka Streams)<br/>/metrics :9400"]
+        P["dotnet-producer Ã—2 (C#)<br/>/metrics :8080"]
+        C["dotnet-consumer Ã—2 (C#)<br/>/metrics :2114"]
+        R["fast-reconciler Ã—2 (Java, Kafka Streams)<br/>/metrics :9400"]
     end
     K[(Kafka)]
     KE["kafka-exporter<br/>:9308"]
@@ -41,348 +41,348 @@ flowchart LR
     K -- "consumer group offset/lag" --> KE
     K -- JMX --> JMX
     P & C & R & KE & JMX -- scrape 5s --> PR
-    P & C & R -. "stdout logları" .-> AL --> LO
+    P & C & R -. "stdout loglarÄ±" .-> AL --> LO
     PR --> G
     LO --> G
 ```
 
-Veri altı kaynaktan gelir. Hepsi Prometheus'a (5 saniyede bir scrape) veya Loki'ye gider; Grafana bu ikisini okur:
+Veri altÄ± kaynaktan gelir. Hepsi Prometheus'a (5 saniyede bir scrape) veya Loki'ye gider; Grafana bu ikisini okur:
 
-| Kaynak | Ne üretir | Nasıl toplanır | Kullanıldığı yer |
+| Kaynak | Ne Ã¼retir | NasÄ±l toplanÄ±r | KullanÄ±ldÄ±ÄŸÄ± yer |
 |---|---|---|---|
-| **Producer** (`dotnet-producer`, 2 replica) | Yazılan event sayısı ve TRY tutarı, HTTP istek sayısı ve süresi, hatalar, .NET runtime | Uygulama `prometheus-net` ile `/metrics` sunar. Prometheus her replica'yı Docker DNS üzerinden ayrı bulur (`dns_sd_configs`). | FAST Services, FAST Operations (transfer sayısı) |
-| **Consumer** (`dotnet-consumer`, 2 replica) | Teknik metrikler: tüketilen event sayısı, hatalar, Kafka → consumer gecikmesi, partition dağılımı, runtime | Producer ile aynı şekilde: `/metrics`, replica başına scrape | FAST Services |
-| **Reconciler** (`fast-reconciler`, Kafka Streams, 2 instance) | FAST iş metrikleri: eşleşen transferler, tamamlanma süresi (banka bazında), banka/tutar/hata nedeni kırılımları, bekleyen/takılı/eşleşmeyen transferler; Kafka Streams ve JVM metrikleri | Micrometer ile `/metrics` (:9400); Prometheus instance'ları Docker DNS ile bulur. Eşleşen ve eşleşmeyen transferler ayrıca `fast_transfer_matched` / `fast_transfer_unmatched` topic'lerine tek tek yazılır. | FAST Operations, FAST Services → Reconciler |
-| **kafka-exporter** | Consumer group başına committed offset, lag ve üye sayısı; topic'lerin son offset'leri; broker sayısı | Kafka'ya bağlanıp offset'leri okur, `:9308/metrics` sunar | Alarmlar, Kafka dashboard'u, FAST Operations hacim grafikleri |
-| **kafka-jmx-exporter** | Broker iç metrikleri: mesaj/s, byte/s, controller ve partition sağlığı, istek süreleri | Kafka'nın JMX portuna (9999) bağlanır, `:5556/metrics` sunar | Kafka dashboard'u → Broker bölümü |
-| **Loglar** | Producer, consumer ve nginx'in stdout logları | Grafana Alloy, Docker container'larını keşfeder ve logları `container` label'ıyla Loki'ye gönderir | FAST Services → Logs |
+| **Producer** (`dotnet-producer`, 2 replica) | YazÄ±lan event sayÄ±sÄ± ve TRY tutarÄ±, HTTP istek sayÄ±sÄ± ve sÃ¼resi, hatalar, .NET runtime | Uygulama `prometheus-net` ile `/metrics` sunar. Prometheus her replica'yÄ± Docker DNS Ã¼zerinden ayrÄ± bulur (`dns_sd_configs`). | FAST Services, FAST Operations (transfer sayÄ±sÄ±) |
+| **Consumer** (`dotnet-consumer`, 2 replica) | Teknik metrikler: tÃ¼ketilen event sayÄ±sÄ±, hatalar, Kafka â†’ consumer gecikmesi, partition daÄŸÄ±lÄ±mÄ±, runtime | Producer ile aynÄ± ÅŸekilde: `/metrics`, replica baÅŸÄ±na scrape | FAST Services |
+| **Reconciler** (`fast-reconciler`, Kafka Streams, 2 instance) | FAST iÅŸ metrikleri: eÅŸleÅŸen transferler, tamamlanma sÃ¼resi (banka bazÄ±nda), banka/tutar/hata nedeni kÄ±rÄ±lÄ±mlarÄ±, bekleyen/takÄ±lÄ±/eÅŸleÅŸmeyen transferler; Kafka Streams ve JVM metrikleri | Micrometer ile `/metrics` (:9400); Prometheus instance'larÄ± Docker DNS ile bulur. EÅŸleÅŸen ve eÅŸleÅŸmeyen transferler ayrÄ±ca `fast_transfer_matched` / `fast_transfer_unmatched` topic'lerine tek tek yazÄ±lÄ±r. | FAST Operations, FAST Services â†’ Reconciler |
+| **kafka-exporter** | Consumer group baÅŸÄ±na committed offset, lag ve Ã¼ye sayÄ±sÄ±; topic'lerin son offset'leri; broker sayÄ±sÄ± | Kafka'ya baÄŸlanÄ±p offset'leri okur, `:9308/metrics` sunar | Alarmlar, Kafka dashboard'u, FAST Operations hacim grafikleri |
+| **kafka-jmx-exporter** | Broker iÃ§ metrikleri: mesaj/s, byte/s, controller ve partition saÄŸlÄ±ÄŸÄ±, istek sÃ¼releri | Kafka'nÄ±n JMX portuna (9999) baÄŸlanÄ±r, `:5556/metrics` sunar | Kafka dashboard'u â†’ Broker bÃ¶lÃ¼mÃ¼ |
+| **Loglar** | Producer, consumer ve nginx'in stdout loglarÄ± | Grafana Alloy, Docker container'larÄ±nÄ± keÅŸfeder ve loglarÄ± `container` label'Ä±yla Loki'ye gÃ¶nderir | FAST Services â†’ Logs |
 
 ### Hangi bilgi nereden gelir
 
-Aynı akış üç farklı kaynaktan ölçülür. Her birinin güçlü olduğu yer farklıdır:
+AynÄ± akÄ±ÅŸ Ã¼Ã§ farklÄ± kaynaktan Ã¶lÃ§Ã¼lÃ¼r. Her birinin gÃ¼Ã§lÃ¼ olduÄŸu yer farklÄ±dÄ±r:
 
-- **Reconciler metrikleri** (`fast_reconciler_*`): FAST'in **iş** görünümü.
-  - Her transfer `fast_send` ile sonucunun eşleşmesinden sonra **bir kez** sayılır. Banka ve tutar her zaman `fast_send`'den alınır.
-  - Tamamlanma süresi, takılı ve eşleşmeyen transferler yalnızca burada vardır, çünkü iki event'i birleştirmek durum gerektirir.
-  - Durum Kafka Streams state store'undadır. Restart, ölçekleme veya rebalance'ta kaybolmaz.
-- **Uygulama sayaçları** (`producer_*`, `consumer_*`): servislerin **teknik** sağlığı.
-  - API istekleri, hatalar, tüketim hızı, replica dağılımı ve gecikme.
-  - Process yeniden başladığında **sıfırlanır**. Panellerde bu yüzden `rate()` / `increase()` ile kullanılır.
-- **Kafka offset'leri** (`kafka_consumergroup_*`, `kafka_topic_partition_*`): consumer group bazında ve **kalıcı**.
-  - Hacim alarmları bilinçli olarak buna dayanır, böylece reconciler çalışmasa da hacim alarmları çalışır.
+- **Reconciler metrikleri** (`fast_kstreams_reconciler_*`): FAST'in **iÅŸ** gÃ¶rÃ¼nÃ¼mÃ¼.
+  - Her transfer `fast_send` ile sonucunun eÅŸleÅŸmesinden sonra **bir kez** sayÄ±lÄ±r. Banka ve tutar her zaman `fast_send`'den alÄ±nÄ±r.
+  - Tamamlanma sÃ¼resi, takÄ±lÄ± ve eÅŸleÅŸmeyen transferler yalnÄ±zca burada vardÄ±r, Ã§Ã¼nkÃ¼ iki event'i birleÅŸtirmek durum gerektirir.
+  - Durum Kafka Streams state store'undadÄ±r. Restart, Ã¶lÃ§ekleme veya rebalance'ta kaybolmaz.
+- **Uygulama sayaÃ§larÄ±** (`producer_*`, `consumer_*`): servislerin **teknik** saÄŸlÄ±ÄŸÄ±.
+  - API istekleri, hatalar, tÃ¼ketim hÄ±zÄ±, replica daÄŸÄ±lÄ±mÄ± ve gecikme.
+  - Process yeniden baÅŸladÄ±ÄŸÄ±nda **sÄ±fÄ±rlanÄ±r**. Panellerde bu yÃ¼zden `rate()` / `increase()` ile kullanÄ±lÄ±r.
+- **Kafka offset'leri** (`kafka_consumergroup_*`, `kafka_topic_partition_*`): consumer group bazÄ±nda ve **kalÄ±cÄ±**.
+  - Hacim alarmlarÄ± bilinÃ§li olarak buna dayanÄ±r, bÃ¶ylece reconciler Ã§alÄ±ÅŸmasa da hacim alarmlarÄ± Ã§alÄ±ÅŸÄ±r.
   - Lag ve partition panelleri de buradan gelir.
 
-**Çıktı topic'lerinin offset'leri sayım için kullanılmaz.** `fast_transfer_matched` / `fast_transfer_unmatched` exactly-once ile yazılır; offset'ler transaction işaretlerini de içerdiği için kayıt sayısından büyüktür. Sayılar reconciler metriklerinden, tek tek kayıtlar topic'lerden okunur.
+**Ã‡Ä±ktÄ± topic'lerinin offset'leri sayÄ±m iÃ§in kullanÄ±lmaz.** `fast_transfer_matched` / `fast_transfer_unmatched` exactly-once ile yazÄ±lÄ±r; offset'ler transaction iÅŸaretlerini de iÃ§erdiÄŸi iÃ§in kayÄ±t sayÄ±sÄ±ndan bÃ¼yÃ¼ktÃ¼r. SayÄ±lar reconciler metriklerinden, tek tek kayÄ±tlar topic'lerden okunur.
 
-### Prometheus recording rule'ları
+### Prometheus recording rule'larÄ±
 
-Alarmlar ve bazı paneller, [observability/prometheus/rules/fast.yml](./observability/prometheus/rules/fast.yml) içindeki önceden hesaplanmış serileri kullanır. Kurallar 15 saniyede bir hesaplanır ve tümü `consumergroup` bazındadır:
+Alarmlar ve bazÄ± paneller, [observability/prometheus/rules/fast.yml](./observability/prometheus/rules/fast.yml) iÃ§indeki Ã¶nceden hesaplanmÄ±ÅŸ serileri kullanÄ±r. Kurallar 15 saniyede bir hesaplanÄ±r ve tÃ¼mÃ¼ `consumergroup` bazÄ±ndadÄ±r:
 
-| Seri | Anlamı |
+| Seri | AnlamÄ± |
 |---|---|
-| `fast:sent:increase5m` | Group'un son 5 dakikada tükettiği `fast_send` sayısı |
-| `fast:outcome:increase5m` | Son 5 dakikada tüketilen `fast_send_success + fast_send_failed` |
-| `fast:success:increase5m`, `fast:failed:increase5m` | Sonuçların ayrı ayrı sayısı |
-| `fast:failed_success:ratio5m` | `failed / success`. 5 dakikada 20'den az sonuç varsa hesaplanmaz. |
-| `fast:outcome_mismatch:ratio5m` | `\|send − outcome\| / send`. 5 dakikada 20'den az event varsa hesaplanmaz. |
-| `fast:business_hours` | İstanbul saatiyle 09:00–18:00 arası `1`, diğer saatlerde `0` |
+| `fast:sent:increase5m` | Group'un son 5 dakikada tÃ¼kettiÄŸi `fast_send` sayÄ±sÄ± |
+| `fast:outcome:increase5m` | Son 5 dakikada tÃ¼ketilen `fast_send_success + fast_send_failed` |
+| `fast:success:increase5m`, `fast:failed:increase5m` | SonuÃ§larÄ±n ayrÄ± ayrÄ± sayÄ±sÄ± |
+| `fast:failed_success:ratio5m` | `failed / success`. 5 dakikada 20'den az sonuÃ§ varsa hesaplanmaz. |
+| `fast:outcome_mismatch:ratio5m` | `\|send âˆ’ outcome\| / send`. 5 dakikada 20'den az event varsa hesaplanmaz. |
+| `fast:business_hours` | Ä°stanbul saatiyle 09:00â€“18:00 arasÄ± `1`, diÄŸer saatlerde `0` |
 
-Bu seriler iki işe yarar:
+Bu seriler iki iÅŸe yarar:
 
-- **Tek tanım:** alarm ve dashboard aynı tanımı kullanır, yani dashboard'da görülen çizgi alarmın baktığı değerin kendisidir.
-- **Hız:** sorgular hafifler.
+- **Tek tanÄ±m:** alarm ve dashboard aynÄ± tanÄ±mÄ± kullanÄ±r, yani dashboard'da gÃ¶rÃ¼len Ã§izgi alarmÄ±n baktÄ±ÄŸÄ± deÄŸerin kendisidir.
+- **HÄ±z:** sorgular hafifler.
 
 ### Grafana'ya provisioning
 
-Grafana elle yapılandırılmaz; her şey dosyadan yüklenir (`observability/grafana/provisioning/`):
+Grafana elle yapÄ±landÄ±rÄ±lmaz; her ÅŸey dosyadan yÃ¼klenir (`observability/grafana/provisioning/`):
 
-| Dosya | Ne yükler |
+| Dosya | Ne yÃ¼kler |
 |---|---|
-| `datasources/prometheus.yml`, `datasources/loki.yml` | Prometheus ve Loki veri kaynakları. UID'ler sabittir, alarmlar bu UID'lere bağlıdır. |
-| `dashboards/dashboards.yml` | `observability/grafana/dashboards/` altındaki JSON'lar. **Alt klasör adı Grafana klasörü olur** (`FAST/`, `Kafka/`). |
-| `alerting/fast-alerts.yml` | FAST alarmları, `FAST` klasörüne yüklenir |
+| `datasources/prometheus.yml`, `datasources/loki.yml` | Prometheus ve Loki veri kaynaklarÄ±. UID'ler sabittir, alarmlar bu UID'lere baÄŸlÄ±dÄ±r. |
+| `dashboards/dashboards.yml` | `observability/grafana/dashboards/` altÄ±ndaki JSON'lar. **Alt klasÃ¶r adÄ± Grafana klasÃ¶rÃ¼ olur** (`FAST/`, `Kafka/`). |
+| `alerting/fast-alerts.yml` | FAST alarmlarÄ±, `FAST` klasÃ¶rÃ¼ne yÃ¼klenir |
 
 ---
 
 ## 2. Dashboard'lar
 
-| Klasör | Dashboard | Kimin için | Cevapladığı soru |
+| KlasÃ¶r | Dashboard | Kimin iÃ§in | CevapladÄ±ÄŸÄ± soru |
 |---|---|---|---|
-| FAST | [FAST Operations](#fast-operations) | İş / operasyon | Transferler sağlıklı mı? Ne kadar para geçti, hangi banka sorunlu? |
-| FAST | [FAST Services](#fast-services) | Uygulama ekibi | Servisler ve replica'lar sağlıklı mı? Sorun API'de mi, consumer'da mı? |
-| Kafka | [Kafka Consumer Groups & Broker](#kafka-consumer-groups--broker) | Platform | Kafka geride kalıyor mu? Hangi partition birikiyor, broker sağlıklı mı? |
+| FAST | [FAST Operations](#fast-operations) | Ä°ÅŸ / operasyon | Transferler saÄŸlÄ±klÄ± mÄ±? Ne kadar para geÃ§ti, hangi banka sorunlu? |
+| FAST | [FAST Services](#fast-services) | Uygulama ekibi | Servisler ve replica'lar saÄŸlÄ±klÄ± mÄ±? Sorun API'de mi, consumer'da mÄ±? |
+| Kafka | [Kafka Consumer Groups & Broker](#kafka-consumer-groups--broker) | Platform | Kafka geride kalÄ±yor mu? Hangi partition birikiyor, broker saÄŸlÄ±klÄ± mÄ±? |
 
-Neden üç ayrı dashboard var:
+Neden Ã¼Ã§ ayrÄ± dashboard var:
 
-- Her biri farklı bir kitleye farklı bir soruyu cevaplar.
-- Tek dashboard'da toplandığında (önceki sürümde 90+ panel vardı) aynı bilgi birkaç yerde tekrar ediyor ve önemli sinyaller kayboluyordu.
-- Bir sorun önce **FAST Operations**'ta görülür. Kök neden **FAST Services**'te (uygulama) veya **Kafka** dashboard'unda (altyapı) aranır.
+- Her biri farklÄ± bir kitleye farklÄ± bir soruyu cevaplar.
+- Tek dashboard'da toplandÄ±ÄŸÄ±nda (Ã¶nceki sÃ¼rÃ¼mde 90+ panel vardÄ±) aynÄ± bilgi birkaÃ§ yerde tekrar ediyor ve Ã¶nemli sinyaller kayboluyordu.
+- Bir sorun Ã¶nce **FAST Operations**'ta gÃ¶rÃ¼lÃ¼r. KÃ¶k neden **FAST Services**'te (uygulama) veya **Kafka** dashboard'unda (altyapÄ±) aranÄ±r.
 
 ### FAST Operations
 
-`FAST / FAST Operations` (`/d/fast-operations`): iş gözüyle FAST akışı.
+`FAST / FAST Operations` (`/d/fast-operations`): iÅŸ gÃ¶zÃ¼yle FAST akÄ±ÅŸÄ±.
 
-**Değişkenler:**
+**DeÄŸiÅŸkenler:**
 
-- `Consumer group`: hacim ve oran grafikleri için (varsayılan `fast-transfer-consumers-dotnet`).
+- `Consumer group`: hacim ve oran grafikleri iÃ§in (varsayÄ±lan `fast-transfer-consumers-dotnet`).
 - `Bank role`: `sender` veya `receiver`.
 - `Bank`: banka filtresi.
 
-**İşaret:** consumer group üyeliği değiştiğinde (restart/rebalance) grafiklerde mor işaret çıkar.
+**Ä°ÅŸaret:** consumer group Ã¼yeliÄŸi deÄŸiÅŸtiÄŸinde (restart/rebalance) grafiklerde mor iÅŸaret Ã§Ä±kar.
 
 #### Overview
 
-Sayfayı açan kişinin 5 saniyede durumu anlaması için var. Tutar ve sayılar seçili zaman aralığı içindir.
+SayfayÄ± aÃ§an kiÅŸinin 5 saniyede durumu anlamasÄ± iÃ§in var. Tutar ve sayÄ±lar seÃ§ili zaman aralÄ±ÄŸÄ± iÃ§indir.
 
-| Panel | Ne gösterir | Neden var |
+| Panel | Ne gÃ¶sterir | Neden var |
 |---|---|---|
-| Transfers (fast_send) | Kafka'ya yazılan `fast_send` sayısı (topic offset'leri) | Trafiğin büyüklüğü |
-| Success rate | Eşleşen transferlerde `success / (success + failed)` | En temel iş sağlığı göstergesi; %95 altı sarı, %80 altı kırmızı |
-| Completion time p95 | `fast_send` → sonuç süresi | FAST "anlık" olmalı; bu değer fiilen SLA'dır |
-| Stuck transfers (> 30s) | 30 sn'den uzun sonuç bekleyen transfer | Müşterinin "param nerede" dediği transferler |
-| Successful volume | Başarılı transferlerin TRY toplamı | İşin parasal büyüklüğü |
-| Failed amount (at risk) | Başarısız transferlerin TRY toplamı | Hata sayısından daha anlamlı bir risk göstergesi |
+| Transfers (fast_send) | Kafka'ya yazÄ±lan `fast_send` sayÄ±sÄ± (topic offset'leri) | TrafiÄŸin bÃ¼yÃ¼klÃ¼ÄŸÃ¼ |
+| Success rate | EÅŸleÅŸen transferlerde `success / (success + failed)` | En temel iÅŸ saÄŸlÄ±ÄŸÄ± gÃ¶stergesi; %95 altÄ± sarÄ±, %80 altÄ± kÄ±rmÄ±zÄ± |
+| Completion time p95 | `fast_send` â†’ sonuÃ§ sÃ¼resi | FAST "anlÄ±k" olmalÄ±; bu deÄŸer fiilen SLA'dÄ±r |
+| Stuck transfers (> 30s) | 30 sn'den uzun sonuÃ§ bekleyen transfer | MÃ¼ÅŸterinin "param nerede" dediÄŸi transferler |
+| Successful volume | BaÅŸarÄ±lÄ± transferlerin TRY toplamÄ± | Ä°ÅŸin parasal bÃ¼yÃ¼klÃ¼ÄŸÃ¼ |
+| Failed amount (at risk) | BaÅŸarÄ±sÄ±z transferlerin TRY toplamÄ± | Hata sayÄ±sÄ±ndan daha anlamlÄ± bir risk gÃ¶stergesi |
 
 #### Alerts
 
-Alarmların görünür olması için bu bölüm sayfanın en üstündedir.
+AlarmlarÄ±n gÃ¶rÃ¼nÃ¼r olmasÄ± iÃ§in bu bÃ¶lÃ¼m sayfanÄ±n en Ã¼stÃ¼ndedir.
 
-| Panel | Ne gösterir | Neden var |
+| Panel | Ne gÃ¶sterir | Neden var |
 |---|---|---|
-| Firing / Pending | Çalan ve beklemedeki FAST alarmı sayısı (kırmızı / turuncu) | Tek bakışta "bir şey var mı?" sorusunun cevabı |
-| FAST alerts | 9 kuralın tamamı ve durumları; çalanlar en üstte | Hangi alarmın, hangi consumer group için çaldığı |
-| Thresholds | Her alarmın eşiği | Eşikleri aramadan görmek için |
+| Firing / Pending | Ã‡alan ve beklemedeki FAST alarmÄ± sayÄ±sÄ± (kÄ±rmÄ±zÄ± / turuncu) | Tek bakÄ±ÅŸta "bir ÅŸey var mÄ±?" sorusunun cevabÄ± |
+| FAST alerts | 9 kuralÄ±n tamamÄ± ve durumlarÄ±; Ã§alanlar en Ã¼stte | Hangi alarmÄ±n, hangi consumer group iÃ§in Ã§aldÄ±ÄŸÄ± |
+| Thresholds | Her alarmÄ±n eÅŸiÄŸi | EÅŸikleri aramadan gÃ¶rmek iÃ§in |
 
 #### Volume vs alert thresholds
 
-Alarmların baktığı değerlerin zaman içindeki hâli. Alarm eşikleri grafiklerde **kesikli çizgi** olarak çizilir; bir alarmın neden çaldığı (veya çalmadığı) burada görülür.
+AlarmlarÄ±n baktÄ±ÄŸÄ± deÄŸerlerin zaman iÃ§indeki hÃ¢li. Alarm eÅŸikleri grafiklerde **kesikli Ã§izgi** olarak Ã§izilir; bir alarmÄ±n neden Ã§aldÄ±ÄŸÄ± (veya Ã§almadÄ±ÄŸÄ±) burada gÃ¶rÃ¼lÃ¼r.
 
-| Panel | Ne gösterir | Neden var |
+| Panel | Ne gÃ¶sterir | Neden var |
 |---|---|---|
-| fast_send per 5m | Son 5 dakikada tüketilen `fast_send`; geçen haftanın aynı saati (gri kesikli); mesai saatleri (gölge) | Düşük / yüksek hacim alarmları. Geçen hafta çizgisi "bu saat için normal ne" sorusunu cevaplar; eşikleri ayarlamaya yarar. |
-| Outcomes (success + failed) per 5m | Aynısı, sonuç event'leri için | Sonuç hacmi alarmları |
-| fast_send_failed per 5m | 5 dakikalık başarısız sayısı; çizgi 500'de | `FAST failed count high` |
-| failed / success ratio | Başarısız / başarılı oranı; çizgi %20'de | `FAST failed/success ratio high` |
-| send / outcome mismatch | Sonucu gelmeyen (veya send'i olmayan) transfer oranı; çizgi %10'da | `FAST send/outcome mismatch` |
+| fast_send per 5m | Son 5 dakikada tÃ¼ketilen `fast_send`; geÃ§en haftanÄ±n aynÄ± saati (gri kesikli); mesai saatleri (gÃ¶lge) | DÃ¼ÅŸÃ¼k / yÃ¼ksek hacim alarmlarÄ±. GeÃ§en hafta Ã§izgisi "bu saat iÃ§in normal ne" sorusunu cevaplar; eÅŸikleri ayarlamaya yarar. |
+| Outcomes (success + failed) per 5m | AynÄ±sÄ±, sonuÃ§ event'leri iÃ§in | SonuÃ§ hacmi alarmlarÄ± |
+| fast_send_failed per 5m | 5 dakikalÄ±k baÅŸarÄ±sÄ±z sayÄ±sÄ±; Ã§izgi 500'de | `FAST failed count high` |
+| failed / success ratio | BaÅŸarÄ±sÄ±z / baÅŸarÄ±lÄ± oranÄ±; Ã§izgi %20'de | `FAST failed/success ratio high` |
+| send / outcome mismatch | Sonucu gelmeyen (veya send'i olmayan) transfer oranÄ±; Ã§izgi %10'da | `FAST send/outcome mismatch` |
 
 #### Transfer completion
 
-Reconciler, her `fast_send`'i aynı `transaction_id`'li sonucuyla eşleştirir. Bu bölüm o eşleştirmenin sonucudur.
+Reconciler, her `fast_send`'i aynÄ± `transaction_id`'li sonucuyla eÅŸleÅŸtirir. Bu bÃ¶lÃ¼m o eÅŸleÅŸtirmenin sonucudur.
 
-| Panel | Ne gösterir | Neden var |
+| Panel | Ne gÃ¶sterir | Neden var |
 |---|---|---|
-| Completion time p50 / p95 / p99 | Tamamlanma süresi yüzdelikleri | Yavaşlamayı erken görmek; p99 kuyruktaki uç durumları gösterir |
-| Completion time distribution | Sürelerin heatmap'i | Ortalamanın gizlediği iki tepeli dağılımları görmek |
-| Slowest banks: completion p95 (top 5) | Gönderen banka başına tamamlanma süresi | "Hangi banka yavaş?" sorusunun cevabı. Bu panel yalnızca eşleştirmeyle mümkündür. |
-| Waiting and unmatched transfers | Sonuç bekleyen, 30 sn'den uzun bekleyen (takılı), send'i olmayan sonuçlar ve 10 dakikada eşleşmeyenler (türüne göre) | "Kayıp" transferleri **tek tek** sayar. Mismatch alarmı toplam sayıları karşılaştırırken bu panel eşleşmeye bakar. Eşleşmeyenlerin `transaction_id`'leri `fast_transfer_unmatched` topic'indedir. |
+| Completion time p50 / p95 / p99 | Tamamlanma sÃ¼resi yÃ¼zdelikleri | YavaÅŸlamayÄ± erken gÃ¶rmek; p99 kuyruktaki uÃ§ durumlarÄ± gÃ¶sterir |
+| Completion time distribution | SÃ¼relerin heatmap'i | OrtalamanÄ±n gizlediÄŸi iki tepeli daÄŸÄ±lÄ±mlarÄ± gÃ¶rmek |
+| Slowest banks: completion p95 (top 5) | GÃ¶nderen banka baÅŸÄ±na tamamlanma sÃ¼resi | "Hangi banka yavaÅŸ?" sorusunun cevabÄ±. Bu panel yalnÄ±zca eÅŸleÅŸtirmeyle mÃ¼mkÃ¼ndÃ¼r. |
+| Waiting and unmatched transfers | SonuÃ§ bekleyen, 30 sn'den uzun bekleyen (takÄ±lÄ±), send'i olmayan sonuÃ§lar ve 10 dakikada eÅŸleÅŸmeyenler (tÃ¼rÃ¼ne gÃ¶re) | "KayÄ±p" transferleri **tek tek** sayar. Mismatch alarmÄ± toplam sayÄ±larÄ± karÅŸÄ±laÅŸtÄ±rÄ±rken bu panel eÅŸleÅŸmeye bakar. EÅŸleÅŸmeyenlerin `transaction_id`'leri `fast_transfer_unmatched` topic'indedir. |
 
 #### Banks ($role)
 
-| Panel | Ne gösterir | Neden var |
+| Panel | Ne gÃ¶sterir | Neden var |
 |---|---|---|
-| Bank summary | Banka başına tamamlanan transfer, başarılı, başarısız, hata oranı, başarılı TRY hacmi | "Sorun hangi bankada?" sorusunun cevabı. Hata oranı hücresi %10 üstünde sarı, %20 üstünde kırmızıdır. Banka ve tutar `fast_send`'den alındığı için sonuç event'leri bu bilgiyi taşımasa da doğrudur. |
-| Successful volume share (TRY) | Bankaların hacim payı | Bir bankadaki sorunun ne kadar parayı etkilediği |
-| Failure rate by bank (top 5) | En kötü 5 bankanın hata oranı | Sorunun ne zaman başladığını ve hangi bankada olduğunu görmek |
-| Completed transfers / s by bank | Banka başına tamamlanan transfer hızı | Bir bankanın trafiğinin aniden düşmesi, o tarafta bir kesinti işareti olabilir |
+| Bank summary | Banka baÅŸÄ±na tamamlanan transfer, baÅŸarÄ±lÄ±, baÅŸarÄ±sÄ±z, hata oranÄ±, baÅŸarÄ±lÄ± TRY hacmi | "Sorun hangi bankada?" sorusunun cevabÄ±. Hata oranÄ± hÃ¼cresi %10 Ã¼stÃ¼nde sarÄ±, %20 Ã¼stÃ¼nde kÄ±rmÄ±zÄ±dÄ±r. Banka ve tutar `fast_send`'den alÄ±ndÄ±ÄŸÄ± iÃ§in sonuÃ§ event'leri bu bilgiyi taÅŸÄ±masa da doÄŸrudur. |
+| Successful volume share (TRY) | BankalarÄ±n hacim payÄ± | Bir bankadaki sorunun ne kadar parayÄ± etkilediÄŸi |
+| Failure rate by bank (top 5) | En kÃ¶tÃ¼ 5 bankanÄ±n hata oranÄ± | Sorunun ne zaman baÅŸladÄ±ÄŸÄ±nÄ± ve hangi bankada olduÄŸunu gÃ¶rmek |
+| Completed transfers / s by bank | Banka baÅŸÄ±na tamamlanan transfer hÄ±zÄ± | Bir bankanÄ±n trafiÄŸinin aniden dÃ¼ÅŸmesi, o tarafta bir kesinti iÅŸareti olabilir |
 
-`Bank role` = `sender` gönderen bankaya, `receiver` alıcı bankaya göre kırar. Enpara.com, QNB'nin kodunu (00111) kullandığı için `QNB / Enpara.com` olarak birlikte görünür. Listede olmayan kodlar `other` altında toplanır.
+`Bank role` = `sender` gÃ¶nderen bankaya, `receiver` alÄ±cÄ± bankaya gÃ¶re kÄ±rar. Enpara.com, QNB'nin kodunu (00111) kullandÄ±ÄŸÄ± iÃ§in `QNB / Enpara.com` olarak birlikte gÃ¶rÃ¼nÃ¼r. Listede olmayan kodlar `other` altÄ±nda toplanÄ±r.
 
 #### Money and failures
 
-| Panel | Ne gösterir | Neden var |
+| Panel | Ne gÃ¶sterir | Neden var |
 |---|---|---|
-| TRY volume per minute | Dakikalık TRY hacmi (başarılı / başarısız) | Parasal akışın zaman içindeki hâli |
-| Average transfer amount | Ortalama tutar | Olağan dışı tutar desenlerini (ör. ani büyük transferler) fark etmek |
-| Amount distribution | Tutar aralıklarına göre transfer sayısı | Trafiğin hangi tutar bandında yoğunlaştığı |
-| Failed transfers by reason | Hata nedenleri (`INSUFFICIENT_BALANCE`, `RECEIVER_BANK_TIMEOUT`…) | Hatanın müşteri kaynaklı mı, sistem kaynaklı mı olduğunu ayırmak |
+| TRY volume per minute | DakikalÄ±k TRY hacmi (baÅŸarÄ±lÄ± / baÅŸarÄ±sÄ±z) | Parasal akÄ±ÅŸÄ±n zaman iÃ§indeki hÃ¢li |
+| Average transfer amount | Ortalama tutar | OlaÄŸan dÄ±ÅŸÄ± tutar desenlerini (Ã¶r. ani bÃ¼yÃ¼k transferler) fark etmek |
+| Amount distribution | Tutar aralÄ±klarÄ±na gÃ¶re transfer sayÄ±sÄ± | TrafiÄŸin hangi tutar bandÄ±nda yoÄŸunlaÅŸtÄ±ÄŸÄ± |
+| Failed transfers by reason | Hata nedenleri (`INSUFFICIENT_BALANCE`, `RECEIVER_BANK_TIMEOUT`â€¦) | HatanÄ±n mÃ¼ÅŸteri kaynaklÄ± mÄ±, sistem kaynaklÄ± mÄ± olduÄŸunu ayÄ±rmak |
 
 ### FAST Services
 
-`FAST / FAST Services` (`/d/fast-services`): servislerin ve replica'ların teknik sağlığı.
+`FAST / FAST Services` (`/d/fast-services`): servislerin ve replica'larÄ±n teknik saÄŸlÄ±ÄŸÄ±.
 
-**Değişkenler:**
+**DeÄŸiÅŸkenler:**
 
 - `Consumer group`
-- `Service`: log paneli için.
+- `Service`: log paneli iÃ§in.
 - `Log filter`: regex.
 
 #### Replicas
 
-| Panel | Ne gösterir | Neden var |
+| Panel | Ne gÃ¶sterir | Neden var |
 |---|---|---|
-| Producer / Consumer replicas up | Ayakta olan replica sayısı (2 = yeşil) | Ölçeklenmiş sistemde bir replica'nın düşmesi trafikte hemen görünmez; burada görünür |
-| Consumer group members | Kafka'nın gördüğü üye sayısı | Ayakta olan consumer replica sayısına eşit olmalı; farklıysa replica çalışıyor ama group'a katılamamıştır |
-| API error rate / API p95 | 5 dakikalık 2xx dışı oran ve yanıt süresi | API sağlığının özeti |
-| Consumer errors (5m) | Okuma veya decode hataları | Consumer sağlığının özeti |
+| Producer / Consumer replicas up | Ayakta olan replica sayÄ±sÄ± (2 = yeÅŸil) | Ã–lÃ§eklenmiÅŸ sistemde bir replica'nÄ±n dÃ¼ÅŸmesi trafikte hemen gÃ¶rÃ¼nmez; burada gÃ¶rÃ¼nÃ¼r |
+| Consumer group members | Kafka'nÄ±n gÃ¶rdÃ¼ÄŸÃ¼ Ã¼ye sayÄ±sÄ± | Ayakta olan consumer replica sayÄ±sÄ±na eÅŸit olmalÄ±; farklÄ±ysa replica Ã§alÄ±ÅŸÄ±yor ama group'a katÄ±lamamÄ±ÅŸtÄ±r |
+| API error rate / API p95 | 5 dakikalÄ±k 2xx dÄ±ÅŸÄ± oran ve yanÄ±t sÃ¼resi | API saÄŸlÄ±ÄŸÄ±nÄ±n Ã¶zeti |
+| Consumer errors (5m) | Okuma veya decode hatalarÄ± | Consumer saÄŸlÄ±ÄŸÄ±nÄ±n Ã¶zeti |
 
 #### Producer API
 
-| Panel | Ne gösterir | Neden var |
+| Panel | Ne gÃ¶sterir | Neden var |
 |---|---|---|
-| Requests / s by endpoint and status | Endpoint ve HTTP kodu bazında istek hızı (4xx turuncu, 5xx kırmızı) | Hangi event'te sorun olduğu |
-| Response time p95 / p99 | Endpoint bazında yanıt süresi (Kafka'ya yazma dahil) | Kafka yavaşladığında ilk burada görülür |
-| Requests / s per replica | Replica başına istek | nginx yükünü dengeli dağıtıyor mu? |
-| Error rate: 4xx vs 5xx | Doğrulama hataları ile Kafka yazma hatalarını ayırır | 4xx istemci sorunudur, 5xx bizim sorunumuzdur |
-| Producer errors by reason | `invalid_json` / `validation` / `kafka` | Hatanın kök nedeni |
+| Requests / s by endpoint and status | Endpoint ve HTTP kodu bazÄ±nda istek hÄ±zÄ± (4xx turuncu, 5xx kÄ±rmÄ±zÄ±) | Hangi event'te sorun olduÄŸu |
+| Response time p95 / p99 | Endpoint bazÄ±nda yanÄ±t sÃ¼resi (Kafka'ya yazma dahil) | Kafka yavaÅŸladÄ±ÄŸÄ±nda ilk burada gÃ¶rÃ¼lÃ¼r |
+| Requests / s per replica | Replica baÅŸÄ±na istek | nginx yÃ¼kÃ¼nÃ¼ dengeli daÄŸÄ±tÄ±yor mu? |
+| Error rate: 4xx vs 5xx | DoÄŸrulama hatalarÄ± ile Kafka yazma hatalarÄ±nÄ± ayÄ±rÄ±r | 4xx istemci sorunudur, 5xx bizim sorunumuzdur |
+| Producer errors by reason | `invalid_json` / `validation` / `kafka` | HatanÄ±n kÃ¶k nedeni |
 
 #### Consumer replicas
 
-| Panel | Ne gösterir | Neden var |
+| Panel | Ne gÃ¶sterir | Neden var |
 |---|---|---|
-| Events consumed / s per replica | Replica başına tüketim | İş yükü dağılımı. 3 partition 2 replica'ya dağıldığı için oran yaklaşık 2:1'dir. |
-| Partitions per replica | Hangi replica'nın hangi partition'ı okuduğu | Rebalance sonrası dağılımın değiştiğini görmek |
-| Kafka → consumer latency p95 | Mesajın Kafka'ya yazılmasından tüketilmesine kadar geçen süre | Backlog varken yükselir; hangi replica'nın geride kaldığını gösterir |
-| Consumer errors / s | Replica ve neden bazında hatalar | Sorunun yerini bulmak |
+| Events consumed / s per replica | Replica baÅŸÄ±na tÃ¼ketim | Ä°ÅŸ yÃ¼kÃ¼ daÄŸÄ±lÄ±mÄ±. 3 partition 2 replica'ya daÄŸÄ±ldÄ±ÄŸÄ± iÃ§in oran yaklaÅŸÄ±k 2:1'dir. |
+| Partitions per replica | Hangi replica'nÄ±n hangi partition'Ä± okuduÄŸu | Rebalance sonrasÄ± daÄŸÄ±lÄ±mÄ±n deÄŸiÅŸtiÄŸini gÃ¶rmek |
+| Kafka â†’ consumer latency p95 | MesajÄ±n Kafka'ya yazÄ±lmasÄ±ndan tÃ¼ketilmesine kadar geÃ§en sÃ¼re | Backlog varken yÃ¼kselir; hangi replica'nÄ±n geride kaldÄ±ÄŸÄ±nÄ± gÃ¶sterir |
+| Consumer errors / s | Replica ve neden bazÄ±nda hatalar | Sorunun yerini bulmak |
 
 #### Reconciler (Kafka Streams)
 
-Eşleştirmeyi yapan servisin sağlığı. Bu servis çalışmazsa FAST Operations'taki tamamlanma, banka ve tutar panelleri güncellenmez. Hacim alarmları ise Kafka offset'lerine dayandığı için çalışmaya devam eder.
+EÅŸleÅŸtirmeyi yapan servisin saÄŸlÄ±ÄŸÄ±. Bu servis Ã§alÄ±ÅŸmazsa FAST Operations'taki tamamlanma, banka ve tutar panelleri gÃ¼ncellenmez. Hacim alarmlarÄ± ise Kafka offset'lerine dayandÄ±ÄŸÄ± iÃ§in Ã§alÄ±ÅŸmaya devam eder.
 
-| Panel | Ne gösterir | Neden var |
+| Panel | Ne gÃ¶sterir | Neden var |
 |---|---|---|
-| Instances RUNNING | Kafka Streams durumu `RUNNING` olan instance sayısı | `FAST reconciler down` alarmının baktığı değer |
-| Input lag | Reconciler'ın henüz okumadığı FAST event'leri | Reconciler geride kalırsa iş metrikleri gecikir |
-| Restore remaining | Rebalance sonrası changelog'dan geri yüklenecek kayıt | Ölçekleme veya restart sonrası state'in taşınmasını izlemek; 0'a inmeli |
-| Failed stream threads | Çöken Kafka Streams thread'leri | Thread'ler otomatik yenilenir; artış bir hatanın tekrarladığını gösterir |
-| In-flight transfers / Stuck | State store'da diğer yarısını bekleyen kayıtlar | Eşleştirme yükü |
-| Records processed / s per instance | Instance başına işlenen kayıt | Yükün instance'lara dağılımı |
-| Reconciler lag by topic | Girdi topic'leri ve iç repartition topic'i için lag | Hangi aşamanın geride kaldığı |
-| Commit / scan latency | Exactly-once transaction commit süresi ve periyodik state taramasının süresi | Yavaşlama kaynağını bulmak; tarama süresi state büyüdükçe artar |
-| In-flight transfers per instance | Instance başına bekleyen kayıtlar | Ölçekleme sırasında state'in instance'lar arasında taşındığını görmek |
-| JVM heap per instance | Java heap kullanımı | Bellek sızıntısı veya kapasite |
+| Instances RUNNING | Kafka Streams durumu `RUNNING` olan instance sayÄ±sÄ± | `FAST reconciler down` alarmÄ±nÄ±n baktÄ±ÄŸÄ± deÄŸer |
+| Input lag | Reconciler'Ä±n henÃ¼z okumadÄ±ÄŸÄ± FAST event'leri | Reconciler geride kalÄ±rsa iÅŸ metrikleri gecikir |
+| Restore remaining | Rebalance sonrasÄ± changelog'dan geri yÃ¼klenecek kayÄ±t | Ã–lÃ§ekleme veya restart sonrasÄ± state'in taÅŸÄ±nmasÄ±nÄ± izlemek; 0'a inmeli |
+| Failed stream threads | Ã‡Ã¶ken Kafka Streams thread'leri | Thread'ler otomatik yenilenir; artÄ±ÅŸ bir hatanÄ±n tekrarladÄ±ÄŸÄ±nÄ± gÃ¶sterir |
+| In-flight transfers / Stuck | State store'da diÄŸer yarÄ±sÄ±nÄ± bekleyen kayÄ±tlar | EÅŸleÅŸtirme yÃ¼kÃ¼ |
+| Records processed / s per instance | Instance baÅŸÄ±na iÅŸlenen kayÄ±t | YÃ¼kÃ¼n instance'lara daÄŸÄ±lÄ±mÄ± |
+| Reconciler lag by topic | Girdi topic'leri ve iÃ§ repartition topic'i iÃ§in lag | Hangi aÅŸamanÄ±n geride kaldÄ±ÄŸÄ± |
+| Commit / scan latency | Exactly-once transaction commit sÃ¼resi ve periyodik state taramasÄ±nÄ±n sÃ¼resi | YavaÅŸlama kaynaÄŸÄ±nÄ± bulmak; tarama sÃ¼resi state bÃ¼yÃ¼dÃ¼kÃ§e artar |
+| In-flight transfers per instance | Instance baÅŸÄ±na bekleyen kayÄ±tlar | Ã–lÃ§ekleme sÄ±rasÄ±nda state'in instance'lar arasÄ±nda taÅŸÄ±ndÄ±ÄŸÄ±nÄ± gÃ¶rmek |
+| JVM heap per instance | Java heap kullanÄ±mÄ± | Bellek sÄ±zÄ±ntÄ±sÄ± veya kapasite |
 
 #### Runtime (per replica)
 
-| Panel | Ne gösterir | Neden var |
+| Panel | Ne gÃ¶sterir | Neden var |
 |---|---|---|
-| Managed heap / Working set | .NET GC heap ve process belleği | Bellek sızıntısı (sürekli artan çizgi) |
-| CPU | Replica başına CPU (1.0 = bir çekirdek) | Ölçekleme ihtiyacı |
-| GC collections / s | GC sıklığı | Yük altında GC baskısı |
+| Managed heap / Working set | .NET GC heap ve process belleÄŸi | Bellek sÄ±zÄ±ntÄ±sÄ± (sÃ¼rekli artan Ã§izgi) |
+| CPU | Replica baÅŸÄ±na CPU (1.0 = bir Ã§ekirdek) | Ã–lÃ§ekleme ihtiyacÄ± |
+| GC collections / s | GC sÄ±klÄ±ÄŸÄ± | YÃ¼k altÄ±nda GC baskÄ±sÄ± |
 
 #### Logs
 
-| Panel | Ne gösterir | Neden var |
+| Panel | Ne gÃ¶sterir | Neden var |
 |---|---|---|
-| Error / warning log lines per minute | Producer, consumer ve reconciler container'ları için hata/uyarı log sayısı (Loki) | Metriklerin yakalamadığı hataları görmek |
-| Error / warning logs | Hata ve uyarı satırları | Bir grafikteki sıçramanın ayrıntısına inmek |
-| All service logs | `Service` ve `Log filter` ile filtrelenen tüm loglar | Belirli bir transferi izlemek, ör. filtreye bir `transaction_id` yazarak |
+| Error / warning log lines per minute | Producer, consumer ve reconciler container'larÄ± iÃ§in hata/uyarÄ± log sayÄ±sÄ± (Loki) | Metriklerin yakalamadÄ±ÄŸÄ± hatalarÄ± gÃ¶rmek |
+| Error / warning logs | Hata ve uyarÄ± satÄ±rlarÄ± | Bir grafikteki sÄ±Ã§ramanÄ±n ayrÄ±ntÄ±sÄ±na inmek |
+| All service logs | `Service` ve `Log filter` ile filtrelenen tÃ¼m loglar | Belirli bir transferi izlemek, Ã¶r. filtreye bir `transaction_id` yazarak |
 
 ### Kafka Consumer Groups & Broker
 
-`Kafka / Kafka Consumer Groups & Broker` (`/d/kafka-consumer-groups`): Kafka tarafının teknik sağlığı.
+`Kafka / Kafka Consumer Groups & Broker` (`/d/kafka-consumer-groups`): Kafka tarafÄ±nÄ±n teknik saÄŸlÄ±ÄŸÄ±.
 
-**Değişkenler:**
+**DeÄŸiÅŸkenler:**
 
-- `Consumer group`: çoklu seçim yapılabilir.
-- `Topic`: yalnızca `fast_send*` topic'leri listelenir.
+- `Consumer group`: Ã§oklu seÃ§im yapÄ±labilir.
+- `Topic`: yalnÄ±zca `fast_send*` topic'leri listelenir.
 
 #### Consumer group
 
-| Panel | Ne gösterir | Neden var |
+| Panel | Ne gÃ¶sterir | Neden var |
 |---|---|---|
-| Group members | Group'taki consumer sayısı | 0 ise kimse tüketmiyordur |
-| Total lag | Yazılıp henüz tüketilmemiş mesaj sayısı | Consumer'ın geride kalıp kalmadığının ana göstergesi |
-| Consume rate / Produce rate | Tüketme ve üretme hızı | Tüketme, üretmeden sürekli düşükse lag büyür |
-| Estimated drain time | `lag / tüketme hızı` | Birikmiş işin ne zaman biteceği |
-| Topic partitions | Toplam partition sayısı | Consumer ölçeklemesinin üst sınırı: partition sayısından fazla replica boşta kalır |
-| Produce vs consume rate | İki hızın zaman içindeki hâli | Lag'in neden büyüdüğünü görmek |
-| Lag by topic | Topic başına lag | `fast-send-backlog` testinde yalnızca `fast_send` lag'i büyür |
+| Group members | Group'taki consumer sayÄ±sÄ± | 0 ise kimse tÃ¼ketmiyordur |
+| Total lag | YazÄ±lÄ±p henÃ¼z tÃ¼ketilmemiÅŸ mesaj sayÄ±sÄ± | Consumer'Ä±n geride kalÄ±p kalmadÄ±ÄŸÄ±nÄ±n ana gÃ¶stergesi |
+| Consume rate / Produce rate | TÃ¼ketme ve Ã¼retme hÄ±zÄ± | TÃ¼ketme, Ã¼retmeden sÃ¼rekli dÃ¼ÅŸÃ¼kse lag bÃ¼yÃ¼r |
+| Estimated drain time | `lag / tÃ¼ketme hÄ±zÄ±` | BirikmiÅŸ iÅŸin ne zaman biteceÄŸi |
+| Topic partitions | Toplam partition sayÄ±sÄ± | Consumer Ã¶lÃ§eklemesinin Ã¼st sÄ±nÄ±rÄ±: partition sayÄ±sÄ±ndan fazla replica boÅŸta kalÄ±r |
+| Produce vs consume rate | Ä°ki hÄ±zÄ±n zaman iÃ§indeki hÃ¢li | Lag'in neden bÃ¼yÃ¼dÃ¼ÄŸÃ¼nÃ¼ gÃ¶rmek |
+| Lag by topic | Topic baÅŸÄ±na lag | `fast-send-backlog` testinde yalnÄ±zca `fast_send` lag'i bÃ¼yÃ¼r |
 
 #### Partitions
 
-| Panel | Ne gösterir | Neden var |
+| Panel | Ne gÃ¶sterir | Neden var |
 |---|---|---|
-| Lag per partition | Topic ve partition başına lag | Lag tek bir partition'daysa sorun o partition'ın sahibi olan replica'dadır |
-| Consume rate per partition | Partition başına tüketim hızı | Durmuş bir partition'ı bulmak |
-| Group members over time | Üye sayısının değişimi | Restart ve rebalance anlarını görmek |
-| Partition status | End offset, committed offset ve lag tablosu | Tam sayılarla doğrulama |
-| Lag by topic / partition | Lag'in çubuk grafiği | En çok biriken partition'ı tek bakışta görmek |
+| Lag per partition | Topic ve partition baÅŸÄ±na lag | Lag tek bir partition'daysa sorun o partition'Ä±n sahibi olan replica'dadÄ±r |
+| Consume rate per partition | Partition baÅŸÄ±na tÃ¼ketim hÄ±zÄ± | DurmuÅŸ bir partition'Ä± bulmak |
+| Group members over time | Ãœye sayÄ±sÄ±nÄ±n deÄŸiÅŸimi | Restart ve rebalance anlarÄ±nÄ± gÃ¶rmek |
+| Partition status | End offset, committed offset ve lag tablosu | Tam sayÄ±larla doÄŸrulama |
+| Lag by topic / partition | Lag'in Ã§ubuk grafiÄŸi | En Ã§ok biriken partition'Ä± tek bakÄ±ÅŸta gÃ¶rmek |
 
 #### Broker
 
-| Panel | Ne gösterir | Neden var |
+| Panel | Ne gÃ¶sterir | Neden var |
 |---|---|---|
-| Brokers / Active controller | Ayakta olan broker ve controller | Kafka ayakta mı? |
-| Offline / Under-replicated partitions | Erişilemeyen veya kopyası eksik partition | 0 olmalı; değilse veri riski vardır |
-| Messages in / s by topic | Broker'a gelen mesaj hızı | Producer metriklerini Kafka tarafından doğrulamak |
-| Bytes in / out | Broker trafiği | Ağ ve disk kapasitesi |
-| Request time p99 | Produce ve FetchConsumer isteklerinin broker tarafındaki süresi | API yavaşsa sorunun Kafka'da olup olmadığını ayırmak. FetchConsumer, boşta beklerken ~500 ms gösterir; bu normaldir. |
+| Brokers / Active controller | Ayakta olan broker ve controller | Kafka ayakta mÄ±? |
+| Offline / Under-replicated partitions | EriÅŸilemeyen veya kopyasÄ± eksik partition | 0 olmalÄ±; deÄŸilse veri riski vardÄ±r |
+| Messages in / s by topic | Broker'a gelen mesaj hÄ±zÄ± | Producer metriklerini Kafka tarafÄ±ndan doÄŸrulamak |
+| Bytes in / out | Broker trafiÄŸi | AÄŸ ve disk kapasitesi |
+| Request time p99 | Produce ve FetchConsumer isteklerinin broker tarafÄ±ndaki sÃ¼resi | API yavaÅŸsa sorunun Kafka'da olup olmadÄ±ÄŸÄ±nÄ± ayÄ±rmak. FetchConsumer, boÅŸta beklerken ~500 ms gÃ¶sterir; bu normaldir. |
 
 ---
 
 ## 3. Alarmlar
 
-Alarmlar Grafana Alerting ile tanımlıdır ([fast-alerts.yml](./observability/grafana/provisioning/alerting/fast-alerts.yml)) ve `FAST` klasöründedir.
+Alarmlar Grafana Alerting ile tanÄ±mlÄ±dÄ±r ([fast-alerts.yml](./observability/grafana/provisioning/alerting/fast-alerts.yml)) ve `FAST` klasÃ¶rÃ¼ndedir.
 
-- **İlk yedi alarm:** `fast-transfer-consumers-dotnet` consumer group'unun Kafka offset'lerine bakar.
-- **Son iki alarm:** reconciler'ın kendi metriklerine bakar.
+- **Ä°lk yedi alarm:** `fast-transfer-consumers-dotnet` consumer group'unun Kafka offset'lerine bakar.
+- **Son iki alarm:** reconciler'Ä±n kendi metriklerine bakar.
 
-**Nasıl değerlendirilir:**
+**NasÄ±l deÄŸerlendirilir:**
 
-- **Değerlendirme sıklığı:** 30 saniyede bir.
-- **Sayılan değer (ilk yedi alarm):** group'un **son 5 dakikada** tükettiği event'ler. Kaynak Kafka offset'leridir (yukarıdaki recording rule'lar).
-- **Bekleme süresi:** koşul ilk sağlandığında alarm **pending** olur. Koşul **5 dakika boyunca** sürerse **firing** olur. Kısa sıçramalar alarm üretmez.
-- **Veri yokken** (düşük trafik veya mesai dışı): alarm **Normal** kalır.
+- **DeÄŸerlendirme sÄ±klÄ±ÄŸÄ±:** 30 saniyede bir.
+- **SayÄ±lan deÄŸer (ilk yedi alarm):** group'un **son 5 dakikada** tÃ¼kettiÄŸi event'ler. Kaynak Kafka offset'leridir (yukarÄ±daki recording rule'lar).
+- **Bekleme sÃ¼resi:** koÅŸul ilk saÄŸlandÄ±ÄŸÄ±nda alarm **pending** olur. KoÅŸul **5 dakika boyunca** sÃ¼rerse **firing** olur. KÄ±sa sÄ±Ã§ramalar alarm Ã¼retmez.
+- **Veri yokken** (dÃ¼ÅŸÃ¼k trafik veya mesai dÄ±ÅŸÄ±): alarm **Normal** kalÄ±r.
 
-| Alarm | Koşul | Ne zaman | Severity | Neden var | Çaldığında nereye bakılır |
+| Alarm | KoÅŸul | Ne zaman | Severity | Neden var | Ã‡aldÄ±ÄŸÄ±nda nereye bakÄ±lÄ±r |
 |---|---|---|---|---|---|
-| **FAST send volume low (business hours)** | `fast_send` < 100 / 5 dk | 09:00–18:00 İstanbul | warning | Mesai saatinde trafiğin düşmesi; genelde istemci, ağ veya producer tarafında bir kesinti | FAST Services → Producer API ve Replicas; producer logları |
-| **FAST send volume high** | `fast_send` > 6000 / 5 dk | Her zaman | critical | Beklenmeyen yük: kampanya, tekrar eden istekler veya kötüye kullanım | FAST Services → Requests by endpoint; Kafka → lag |
-| **FAST outcome volume low (business hours)** | `success + failed` < 100 / 5 dk | 09:00–18:00 İstanbul | warning | Transferler gidiyor ama sonuçlar gelmiyor | FAST Operations → Waiting transfers; Kafka → Lag by topic |
-| **FAST outcome volume high** | `success + failed` > 6000 / 5 dk | Her zaman | critical | Sonuç akışında olağan dışı yük (ör. bir backlog'un bir anda boşalması) | Kafka → Produce vs consume rate |
-| **FAST failed count high** | `fast_send_failed` > 500 / 5 dk | Her zaman | critical | Mutlak hata sayısı yüksek | FAST Operations → Failed by reason ve Bank summary |
-| **FAST failed/success ratio high** | `failed / success` > %20 | Her zaman | critical | Trafik düşükken de anlamlı olan oransal bozulma | FAST Operations → Failure rate by bank (top 5) |
-| **FAST send/outcome mismatch** | `\|send − outcome\| / send` > %10 | Her zaman | warning | Sonucu gelmeyen transferler veya send'i olmayan sonuçlar (veri kaybı, eksik entegrasyon) | FAST Operations → Waiting and unmatched transfers; Kafka → Lag by topic |
-| **FAST stuck transfers high** | 30 sn'den uzun sonuç bekleyen transfer > 50 | Her zaman | warning | Müşterinin parası çıkmış ama sonuç gelmemiş; karşı banka veya sonuç akışında bir sorun | FAST Operations → Slowest banks ve Waiting and unmatched; `fast_transfer_unmatched` topic'i |
-| **FAST reconciler down** | `RUNNING` reconciler instance'ı yok (2 dk) | Her zaman | critical | İş metrikleri (tamamlanma, banka, tutar, takılı) güncellenmiyor | FAST Services → Reconciler; `docker compose logs fast-reconciler` |
+| **FAST send volume low (business hours)** | `fast_send` < 100 / 5 dk | 09:00â€“18:00 Ä°stanbul | warning | Mesai saatinde trafiÄŸin dÃ¼ÅŸmesi; genelde istemci, aÄŸ veya producer tarafÄ±nda bir kesinti | FAST Services â†’ Producer API ve Replicas; producer loglarÄ± |
+| **FAST send volume high** | `fast_send` > 6000 / 5 dk | Her zaman | critical | Beklenmeyen yÃ¼k: kampanya, tekrar eden istekler veya kÃ¶tÃ¼ye kullanÄ±m | FAST Services â†’ Requests by endpoint; Kafka â†’ lag |
+| **FAST outcome volume low (business hours)** | `success + failed` < 100 / 5 dk | 09:00â€“18:00 Ä°stanbul | warning | Transferler gidiyor ama sonuÃ§lar gelmiyor | FAST Operations â†’ Waiting transfers; Kafka â†’ Lag by topic |
+| **FAST outcome volume high** | `success + failed` > 6000 / 5 dk | Her zaman | critical | SonuÃ§ akÄ±ÅŸÄ±nda olaÄŸan dÄ±ÅŸÄ± yÃ¼k (Ã¶r. bir backlog'un bir anda boÅŸalmasÄ±) | Kafka â†’ Produce vs consume rate |
+| **FAST failed count high** | `fast_send_failed` > 500 / 5 dk | Her zaman | critical | Mutlak hata sayÄ±sÄ± yÃ¼ksek | FAST Operations â†’ Failed by reason ve Bank summary |
+| **FAST failed/success ratio high** | `failed / success` > %20 | Her zaman | critical | Trafik dÃ¼ÅŸÃ¼kken de anlamlÄ± olan oransal bozulma | FAST Operations â†’ Failure rate by bank (top 5) |
+| **FAST send/outcome mismatch** | `\|send âˆ’ outcome\| / send` > %10 | Her zaman | warning | Sonucu gelmeyen transferler veya send'i olmayan sonuÃ§lar (veri kaybÄ±, eksik entegrasyon) | FAST Operations â†’ Waiting and unmatched transfers; Kafka â†’ Lag by topic |
+| **FAST stuck transfers high** | 30 sn'den uzun sonuÃ§ bekleyen transfer > 50 | Her zaman | warning | MÃ¼ÅŸterinin parasÄ± Ã§Ä±kmÄ±ÅŸ ama sonuÃ§ gelmemiÅŸ; karÅŸÄ± banka veya sonuÃ§ akÄ±ÅŸÄ±nda bir sorun | FAST Operations â†’ Slowest banks ve Waiting and unmatched; `fast_transfer_unmatched` topic'i |
+| **FAST reconciler down** | `RUNNING` reconciler instance'Ä± yok (2 dk) | Her zaman | critical | Ä°ÅŸ metrikleri (tamamlanma, banka, tutar, takÄ±lÄ±) gÃ¼ncellenmiyor | FAST Services â†’ Reconciler; `docker compose logs fast-reconciler` |
 
 **Notlar:**
 
-- **Mesai saati koşulu:** düşük hacim alarmları yalnızca mesai saatlerinde değerlendirilir. Gece trafiğin düşük olması normaldir ve alarm üretmemelidir.
-- **Oranlar için en az 20 event:** 5 dakikada 20'nin altında event varsa oranlar hesaplanmaz. Aksi hâlde düşük trafikte tek bir sonuçsuz transfer "%100 mismatch" yapardı.
-- **Consumer tamamen durursa:** mesai saatlerinde **düşük hacim** alarmları çalar, çünkü group hiçbir şey tüketmez. Mesai dışında bu durum Kafka dashboard'undaki lag ile görülür.
-- **Backlog boşalırken:** bir `fast_send` backlog'u bir anda tüketildiğinde, kısa süreliğine `mismatch` alarmı **pending** olabilir. Backlog 5 dakikadan kısa sürede eriyorsa firing olmaz.
-- **Reconciler alarmının veri yokken davranışı:** `FAST reconciler down` için "veri yok" durumu da alarm sayılır (`noDataState: Alerting`). Hiçbir instance scrape edilemiyorsa da çalar.
-- **Bildirim yok:** henüz bir contact point tanımlı değil. Alarmlar yalnızca Grafana'da (Alerting menüsü ve FAST Operations → Alerts) görünür. Slack veya e-posta için Grafana'da bir contact point ve notification policy eklenmelidir.
+- **Mesai saati koÅŸulu:** dÃ¼ÅŸÃ¼k hacim alarmlarÄ± yalnÄ±zca mesai saatlerinde deÄŸerlendirilir. Gece trafiÄŸin dÃ¼ÅŸÃ¼k olmasÄ± normaldir ve alarm Ã¼retmemelidir.
+- **Oranlar iÃ§in en az 20 event:** 5 dakikada 20'nin altÄ±nda event varsa oranlar hesaplanmaz. Aksi hÃ¢lde dÃ¼ÅŸÃ¼k trafikte tek bir sonuÃ§suz transfer "%100 mismatch" yapardÄ±.
+- **Consumer tamamen durursa:** mesai saatlerinde **dÃ¼ÅŸÃ¼k hacim** alarmlarÄ± Ã§alar, Ã§Ã¼nkÃ¼ group hiÃ§bir ÅŸey tÃ¼ketmez. Mesai dÄ±ÅŸÄ±nda bu durum Kafka dashboard'undaki lag ile gÃ¶rÃ¼lÃ¼r.
+- **Backlog boÅŸalÄ±rken:** bir `fast_send` backlog'u bir anda tÃ¼ketildiÄŸinde, kÄ±sa sÃ¼reliÄŸine `mismatch` alarmÄ± **pending** olabilir. Backlog 5 dakikadan kÄ±sa sÃ¼rede eriyorsa firing olmaz.
+- **Reconciler alarmÄ±nÄ±n veri yokken davranÄ±ÅŸÄ±:** `FAST reconciler down` iÃ§in "veri yok" durumu da alarm sayÄ±lÄ±r (`noDataState: Alerting`). HiÃ§bir instance scrape edilemiyorsa da Ã§alar.
+- **Bildirim yok:** henÃ¼z bir contact point tanÄ±mlÄ± deÄŸil. Alarmlar yalnÄ±zca Grafana'da (Alerting menÃ¼sÃ¼ ve FAST Operations â†’ Alerts) gÃ¶rÃ¼nÃ¼r. Slack veya e-posta iÃ§in Grafana'da bir contact point ve notification policy eklenmelidir.
 
-**Alarmları test etmek** için Artillery case'leri vardır ([performance/artillery/README.md](./performance/artillery/README.md)). Alarm testleri aynı anda çalıştırılmamalıdır, çünkü trafikleri birbirine karışır.
+**AlarmlarÄ± test etmek** iÃ§in Artillery case'leri vardÄ±r ([performance/artillery/README.md](./performance/artillery/README.md)). Alarm testleri aynÄ± anda Ã§alÄ±ÅŸtÄ±rÄ±lmamalÄ±dÄ±r, Ã§Ã¼nkÃ¼ trafikleri birbirine karÄ±ÅŸÄ±r.
 
-| Case | Tetiklediği alarm |
+| Case | TetiklediÄŸi alarm |
 |---|---|
 | `missing-outcomes` | send/outcome mismatch |
 | `high-failure` | failed count high, failed/success ratio high |
 | `fast-send-spike` | send volume high, outcome volume high |
-| `low-volume` (yalnızca mesai saatinde) | send volume low, outcome volume low |
-| `fast-send-backlog` (consumer kapalı, sonuç yok) | 30 sn sonra takılı transferler artar; 50'yi geçip 5 dk sürerse stuck transfers high |
+| `low-volume` (yalnÄ±zca mesai saatinde) | send volume low, outcome volume low |
+| `fast-send-backlog` (consumer kapalÄ±, sonuÃ§ yok) | 30 sn sonra takÄ±lÄ± transferler artar; 50'yi geÃ§ip 5 dk sÃ¼rerse stuck transfers high |
 | `docker compose stop fast-reconciler` (elle) | 2 dk sonra reconciler down |
 
-**Eşik veya süre değiştirmek:**
+**EÅŸik veya sÃ¼re deÄŸiÅŸtirmek:**
 
-1. `fast-alerts.yml` içinde ilgili kuralın `params` (eşik) ve `for` (süre) değerini değiştirin.
-2. Dosyanın başındaki tabloyu güncelleyin.
-3. `docker compose restart grafana` çalıştırın.
+1. `fast-alerts.yml` iÃ§inde ilgili kuralÄ±n `params` (eÅŸik) ve `for` (sÃ¼re) deÄŸerini deÄŸiÅŸtirin.
+2. DosyanÄ±n baÅŸÄ±ndaki tabloyu gÃ¼ncelleyin.
+3. `docker compose restart grafana` Ã§alÄ±ÅŸtÄ±rÄ±n.
 
-Mesai saatleri ise `rules/fast.yml` içindeki `fast:business_hours` kuralındadır (`9` / `18`, UTC+3 sabit). Değiştirdikten sonra `docker compose kill -s HUP prometheus` çalıştırın.
+Mesai saatleri ise `rules/fast.yml` iÃ§indeki `fast:business_hours` kuralÄ±ndadÄ±r (`9` / `18`, UTC+3 sabit). DeÄŸiÅŸtirdikten sonra `docker compose kill -s HUP prometheus` Ã§alÄ±ÅŸtÄ±rÄ±n.
 
 ---
 
 ## 4. Yeni metrik, panel veya alarm eklemek
 
-Bir bilginin dashboard'da görünmesi için zincirin her halkası tamamlanmalıdır. Kaynaktan Grafana'ya doğru:
+Bir bilginin dashboard'da gÃ¶rÃ¼nmesi iÃ§in zincirin her halkasÄ± tamamlanmalÄ±dÄ±r. Kaynaktan Grafana'ya doÄŸru:
 
-### a) Uygulamada metrik üretmek
+### a) Uygulamada metrik Ã¼retmek
 
-Önce metriğin nereye ait olduğuna karar verin:
+Ã–nce metriÄŸin nereye ait olduÄŸuna karar verin:
 
-- **Tek bir event'ten çıkan teknik bir ölçüm** (istek süresi, hata, tüketim hızı): producer veya consumer'a, `prometheus-net` ile.
-- **Transfer bazında bir iş ölçümü** (iki event'in birleşimi, banka/tutar kırılımı, süre): reconciler'a, Micrometer ile ([ReconcilerMetrics.java](./reconciler/src/main/java/fast/reconciler/ReconcilerMetrics.java)):
+- **Tek bir event'ten Ã§Ä±kan teknik bir Ã¶lÃ§Ã¼m** (istek sÃ¼resi, hata, tÃ¼ketim hÄ±zÄ±): producer veya consumer'a, `prometheus-net` ile.
+- **Transfer bazÄ±nda bir iÅŸ Ã¶lÃ§Ã¼mÃ¼** (iki event'in birleÅŸimi, banka/tutar kÄ±rÄ±lÄ±mÄ±, sÃ¼re): reconciler'a, Micrometer ile ([ReconcilerMetrics.java](./reconciler/src/main/java/fast/reconciler/ReconcilerMetrics.java)):
 
   ```java
-  Counter.builder("fast.reconciler.refunds")          // Prometheus: fast_reconciler_refunds_total
+  Counter.builder("fast.kstreams.reconciler.refunds")          // Prometheus: fast_kstreams_reconciler_refunds_total
           .tags("reason", reason).register(registry).increment();
   ```
 
-C# servislerinde ör. [ConsumerApp.cs](./dotnet/FastTransfer.Consumer/ConsumerApp.cs):
+C# servislerinde Ã¶r. [ConsumerApp.cs](./dotnet/FastTransfer.Consumer/ConsumerApp.cs):
 
 ```csharp
 static readonly Counter Refunds = Metrics.CreateCounter(
@@ -393,19 +393,19 @@ Refunds.WithLabels(reason).Inc();
 
 Kurallar:
 
-- **Ad:** `<servis>_<ne>_<birim>` biçiminde olmalı. Sayaçlar `_total` ile biter.
-- **Sınırlı label:** label değerleri sınırlı bir küme olmalıdır (event, banka, neden). `transaction_id`, IBAN veya tutar **label yapılmaz**; her biri yeni bir seri üretir ve Prometheus'u şişirir. Tanımsız değerler `other` gibi tek bir değerde toplanmalıdır (bkz. `Banks.labels`). Transfer bazında ayrıntı gerekiyorsa çıktı topic'ine yazılır, metriğe değil.
-- **Görünürlük:** metrik `/metrics` endpoint'inde otomatik görünür. Kontrol: `curl localhost:2114/metrics | grep consumer_fast_refunds`.
+- **Ad:** `<servis>_<ne>_<birim>` biÃ§iminde olmalÄ±. SayaÃ§lar `_total` ile biter.
+- **SÄ±nÄ±rlÄ± label:** label deÄŸerleri sÄ±nÄ±rlÄ± bir kÃ¼me olmalÄ±dÄ±r (event, banka, neden). `transaction_id`, IBAN veya tutar **label yapÄ±lmaz**; her biri yeni bir seri Ã¼retir ve Prometheus'u ÅŸiÅŸirir. TanÄ±msÄ±z deÄŸerler `other` gibi tek bir deÄŸerde toplanmalÄ±dÄ±r (bkz. `Banks.labels`). Transfer bazÄ±nda ayrÄ±ntÄ± gerekiyorsa Ã§Ä±ktÄ± topic'ine yazÄ±lÄ±r, metriÄŸe deÄŸil.
+- **GÃ¶rÃ¼nÃ¼rlÃ¼k:** metrik `/metrics` endpoint'inde otomatik gÃ¶rÃ¼nÃ¼r. Kontrol: `curl localhost:2114/metrics | grep consumer_fast_refunds`.
 
-### b) Prometheus'un toplaması
+### b) Prometheus'un toplamasÄ±
 
-- Mevcut servislere eklenen metrikler için bir şey yapmak gerekmez; replica'lar zaten scrape ediliyor.
-- **Yeni bir servis** için [prometheus.yml](./observability/prometheus.yml)'e bir `job` ekleyin. Replica'lı servislerde `dns_sd_configs` kullanın ve `impl` label'ını ekleyin. Ardından `docker compose kill -s HUP prometheus` çalıştırın.
-- Kontrol: http://localhost:9090/targets sayfasında hedef `UP` olmalı.
+- Mevcut servislere eklenen metrikler iÃ§in bir ÅŸey yapmak gerekmez; replica'lar zaten scrape ediliyor.
+- **Yeni bir servis** iÃ§in [prometheus.yml](./observability/prometheus.yml)'e bir `job` ekleyin. Replica'lÄ± servislerde `dns_sd_configs` kullanÄ±n ve `impl` label'Ä±nÄ± ekleyin. ArdÄ±ndan `docker compose kill -s HUP prometheus` Ã§alÄ±ÅŸtÄ±rÄ±n.
+- Kontrol: http://localhost:9090/targets sayfasÄ±nda hedef `UP` olmalÄ±.
 
-### c) (İsteğe bağlı) Recording rule
+### c) (Ä°steÄŸe baÄŸlÄ±) Recording rule
 
-Alarm ve dashboard aynı hesaplamayı kullanacaksa veya sorgu ağırsa [rules/fast.yml](./observability/prometheus/rules/fast.yml)'e bir kural ekleyin. Ad `seviye:metrik:işlem` biçiminde olmalı (ör. `fast:refunds:increase5m`). Ardından:
+Alarm ve dashboard aynÄ± hesaplamayÄ± kullanacaksa veya sorgu aÄŸÄ±rsa [rules/fast.yml](./observability/prometheus/rules/fast.yml)'e bir kural ekleyin. Ad `seviye:metrik:iÅŸlem` biÃ§iminde olmalÄ± (Ã¶r. `fast:refunds:increase5m`). ArdÄ±ndan:
 
 ```bash
 docker compose kill -s HUP prometheus
@@ -413,28 +413,28 @@ docker compose kill -s HUP prometheus
 
 ### d) Panel eklemek
 
-1. Paneli Grafana'da tasarlayın.
-2. Dashboard'u **Export → Export as JSON** ile dışa alın.
-3. JSON'u `observability/grafana/dashboards/<Klasör>/` altındaki dosyaya yazın. Klasör adı Grafana klasörü olur.
-4. Sorgularda veri kaynağı olarak `${datasource}` (Prometheus) veya `${loki}` değişkenini kullanın. Uygulama metriklerine `impl="dotnet"` filtresini ekleyin.
-5. `docker compose restart grafana` çalıştırın. Windows bind mount'larında dosya değişikliği her zaman algılanmadığı için restart en güvenli yoldur.
+1. Paneli Grafana'da tasarlayÄ±n.
+2. Dashboard'u **Export â†’ Export as JSON** ile dÄ±ÅŸa alÄ±n.
+3. JSON'u `observability/grafana/dashboards/<KlasÃ¶r>/` altÄ±ndaki dosyaya yazÄ±n. KlasÃ¶r adÄ± Grafana klasÃ¶rÃ¼ olur.
+4. Sorgularda veri kaynaÄŸÄ± olarak `${datasource}` (Prometheus) veya `${loki}` deÄŸiÅŸkenini kullanÄ±n. Uygulama metriklerine `impl="dotnet"` filtresini ekleyin.
+5. `docker compose restart grafana` Ã§alÄ±ÅŸtÄ±rÄ±n. Windows bind mount'larÄ±nda dosya deÄŸiÅŸikliÄŸi her zaman algÄ±lanmadÄ±ÄŸÄ± iÃ§in restart en gÃ¼venli yoldur.
 
-Provisioned dashboard'lar Grafana UI'dan doğrudan kaydedilemez. Kaynak her zaman repo'daki JSON dosyasıdır; değişiklik kalıcı olsun diye dosyaya yazılır.
+Provisioned dashboard'lar Grafana UI'dan doÄŸrudan kaydedilemez. Kaynak her zaman repo'daki JSON dosyasÄ±dÄ±r; deÄŸiÅŸiklik kalÄ±cÄ± olsun diye dosyaya yazÄ±lÄ±r.
 
 ### e) Alarm eklemek
 
-1. [fast-alerts.yml](./observability/grafana/provisioning/alerting/fast-alerts.yml)'e mevcut bir kuralı kopyalayarak yeni bir kural ekleyin:
-   - **`uid`:** benzersiz olmalı.
-   - **Sorgu (`refId: A`):** `instant: true` olmalı.
+1. [fast-alerts.yml](./observability/grafana/provisioning/alerting/fast-alerts.yml)'e mevcut bir kuralÄ± kopyalayarak yeni bir kural ekleyin:
+   - **`uid`:** benzersiz olmalÄ±.
+   - **Sorgu (`refId: A`):** `instant: true` olmalÄ±.
    - **`datasourceUid`:** `PBFA97CFB590B2093` (Prometheus).
-   - **Eşik (`refId: C`):** `type: threshold`, `gt` veya `lt`.
-2. `for` ve `noDataState` alanlarını belirleyin, `severity` label'ını ekleyin.
-3. Dosya başındaki tabloya ve bu dokümana satır ekleyin.
-4. `docker compose restart grafana` çalıştırın. Kontrol: Grafana → Alerting → Alert rules altında kuralın `health` değeri `ok` olmalı.
+   - **EÅŸik (`refId: C`):** `type: threshold`, `gt` veya `lt`.
+2. `for` ve `noDataState` alanlarÄ±nÄ± belirleyin, `severity` label'Ä±nÄ± ekleyin.
+3. Dosya baÅŸÄ±ndaki tabloya ve bu dokÃ¼mana satÄ±r ekleyin.
+4. `docker compose restart grafana` Ã§alÄ±ÅŸtÄ±rÄ±n. Kontrol: Grafana â†’ Alerting â†’ Alert rules altÄ±nda kuralÄ±n `health` deÄŸeri `ok` olmalÄ±.
 
-### f) Log göstermek
+### f) Log gÃ¶stermek
 
-Uygulamanın stdout'a yazması yeterlidir. Alloy tüm container'ları otomatik keşfeder ve `container` label'ıyla Loki'ye gönderir. Sorgu örneği:
+UygulamanÄ±n stdout'a yazmasÄ± yeterlidir. Alloy tÃ¼m container'larÄ± otomatik keÅŸfeder ve `container` label'Ä±yla Loki'ye gÃ¶nderir. Sorgu Ã¶rneÄŸi:
 
 ```logql
 {container=~".*dotnet-consumer.*"} |= "transaction_id=tx-1001"
@@ -442,11 +442,11 @@ Uygulamanın stdout'a yazması yeterlidir. Alloy tüm container'ları otomatik k
 
 ---
 
-## 5. Bilinen kısıtlar
+## 5. Bilinen kÄ±sÄ±tlar
 
-- **Uygulama sayaçları restart'ta sıfırlanır.** Bu sayaçlar `rate()` / `increase()` ile kullanıldığı için grafikler etkilenmez. Restart anında stat panelleri kısa süre düşük gösterebilir. Kalıcı toplamlar için Kafka offset'leri kullanılır.
-- **Reconciler sayaçları "yan etki"dir.** Çıktı topic'leri exactly-once ile tam doğrudur. Ancak bir transaction yeniden denendiğinde Prometheus sayacı iki kez artabilir; bu nadirdir. Kesin sayı gerektiğinde topic'ler esas alınır.
-- **State taraması tüm state'i gezer.** Takılı/eşleşmeyen tespiti için her 5 saniyede bekleyen kayıtların tamamı taranır. Bekleyen kayıt sayısı (normalde yüzler) çok büyürse `Commit / scan latency` panelinden izlenmeli; gerekirse zamana göre indekslenmiş bir store'a geçilmeli.
-- **Reconciler ilk açılışta geçmişi işler.** Yeni bir `APPLICATION_ID` ile başlatıldığında topic'leri baştan okur. Eşleşmesi çok önce bitmiş eski kayıtlar ilk taramada "unmatched" olarak raporlanabilir.
-- **"Last week" çizgileri** en az bir haftalık veri birikene kadar boştur. Prometheus verisi varsayılan olarak 15 gün tutulur.
-- **Eski Go consumer group'u** (`fast-transfer-consumers`) Kafka'da duruyorsa Kafka dashboard'unda görünebilir. Alarmlar ve FAST dashboard'ları onu dikkate almaz. Silmek için README'deki komut kullanılabilir.
+- **Uygulama sayaÃ§larÄ± restart'ta sÄ±fÄ±rlanÄ±r.** Bu sayaÃ§lar `rate()` / `increase()` ile kullanÄ±ldÄ±ÄŸÄ± iÃ§in grafikler etkilenmez. Restart anÄ±nda stat panelleri kÄ±sa sÃ¼re dÃ¼ÅŸÃ¼k gÃ¶sterebilir. KalÄ±cÄ± toplamlar iÃ§in Kafka offset'leri kullanÄ±lÄ±r.
+- **Reconciler sayaÃ§larÄ± "yan etki"dir.** Ã‡Ä±ktÄ± topic'leri exactly-once ile tam doÄŸrudur. Ancak bir transaction yeniden denendiÄŸinde Prometheus sayacÄ± iki kez artabilir; bu nadirdir. Kesin sayÄ± gerektiÄŸinde topic'ler esas alÄ±nÄ±r.
+- **State taramasÄ± tÃ¼m state'i gezer.** TakÄ±lÄ±/eÅŸleÅŸmeyen tespiti iÃ§in her 5 saniyede bekleyen kayÄ±tlarÄ±n tamamÄ± taranÄ±r. Bekleyen kayÄ±t sayÄ±sÄ± (normalde yÃ¼zler) Ã§ok bÃ¼yÃ¼rse `Commit / scan latency` panelinden izlenmeli; gerekirse zamana gÃ¶re indekslenmiÅŸ bir store'a geÃ§ilmeli.
+- **Reconciler ilk aÃ§Ä±lÄ±ÅŸta geÃ§miÅŸi iÅŸler.** Yeni bir `APPLICATION_ID` ile baÅŸlatÄ±ldÄ±ÄŸÄ±nda topic'leri baÅŸtan okur. EÅŸleÅŸmesi Ã§ok Ã¶nce bitmiÅŸ eski kayÄ±tlar ilk taramada "unmatched" olarak raporlanabilir.
+- **"Last week" Ã§izgileri** en az bir haftalÄ±k veri birikene kadar boÅŸtur. Prometheus verisi varsayÄ±lan olarak 15 gÃ¼n tutulur.
+- **Eski Go consumer group'u** (`fast-transfer-consumers`) Kafka'da duruyorsa Kafka dashboard'unda gÃ¶rÃ¼nebilir. Alarmlar ve FAST dashboard'larÄ± onu dikkate almaz. Silmek iÃ§in README'deki komut kullanÄ±labilir.

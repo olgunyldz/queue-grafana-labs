@@ -3,7 +3,7 @@
 # Runs 8 minutes so the "FAST send/outcome mismatch" alert
 # (> 10% difference for 5 minutes) goes pending, then firing.
 config:
-  target: http://localhost:18081
+  target: http://127.0.0.1:8080
   processor: ../processors/fast.cjs
   plugins:
     expect: {}

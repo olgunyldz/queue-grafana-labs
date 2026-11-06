@@ -1,7 +1,7 @@
 # No fast_send: producer and consumer are up, but only outcome events
 # (fast_send_success / fast_send_failed) are sent. The fast_send topic stays flat.
 config:
-  target: http://localhost:18081
+  target: http://127.0.0.1:8080
   processor: ../processors/fast.cjs
   plugins:
     expect: {}

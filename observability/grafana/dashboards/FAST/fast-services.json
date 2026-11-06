@@ -516,7 +516,7 @@
             "uid": "${datasource}"
           },
           "expr": "sum by (endpoint, code) (rate(producer_http_requests_total{impl=\"dotnet\", job=\"dotnet-producer\"}[1m]))",
-          "legendFormat": "{{endpoint}} · {{code}}"
+          "legendFormat": "{{endpoint}} Â· {{code}}"
         }
       ],
       "fieldConfig": {
@@ -537,7 +537,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": ".*· 4.."
+              "options": ".*Â· 4.."
             },
             "properties": [
               {
@@ -552,7 +552,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": ".*· 5.."
+              "options": ".*Â· 5.."
             },
             "properties": [
               {
@@ -604,7 +604,7 @@
             "uid": "${datasource}"
           },
           "expr": "histogram_quantile(0.95, sum by (le, endpoint) (rate(producer_http_request_duration_seconds_bucket{impl=\"dotnet\", job=\"dotnet-producer\"}[1m])))",
-          "legendFormat": "p95 · {{endpoint}}"
+          "legendFormat": "p95 Â· {{endpoint}}"
         },
         {
           "refId": "B",
@@ -613,7 +613,7 @@
             "uid": "${datasource}"
           },
           "expr": "histogram_quantile(0.99, sum by (le, endpoint) (rate(producer_http_request_duration_seconds_bucket{impl=\"dotnet\", job=\"dotnet-producer\"}[1m])))",
-          "legendFormat": "p99 · {{endpoint}}"
+          "legendFormat": "p99 Â· {{endpoint}}"
         }
       ],
       "fieldConfig": {
@@ -827,7 +827,7 @@
             "uid": "${datasource}"
           },
           "expr": "sum by (event, reason) (rate(producer_errors_total{impl=\"dotnet\", job=\"dotnet-producer\"}[1m]))",
-          "legendFormat": "{{event}} · {{reason}}"
+          "legendFormat": "{{event}} Â· {{reason}}"
         }
       ],
       "fieldConfig": {
@@ -955,7 +955,7 @@
             "uid": "${datasource}"
           },
           "expr": "sum by (instance, partition) (rate(consumer_partition_events_total{impl=\"dotnet\", job=\"dotnet-consumer\"}[1m])) > 0",
-          "legendFormat": "{{instance}} · p{{partition}}"
+          "legendFormat": "{{instance}} Â· p{{partition}}"
         }
       ],
       "fieldConfig": {
@@ -993,7 +993,7 @@
     {
       "id": 17,
       "type": "timeseries",
-      "title": "Kafka → consumer latency p95 per replica",
+      "title": "Kafka â†’ consumer latency p95 per replica",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -1070,7 +1070,7 @@
             "uid": "${datasource}"
           },
           "expr": "sum by (instance, reason) (rate(consumer_errors_total{impl=\"dotnet\", job=\"dotnet-consumer\"}[1m]))",
-          "legendFormat": "{{instance}} · {{reason}}"
+          "legendFormat": "{{instance}} Â· {{reason}}"
         }
       ],
       "fieldConfig": {
@@ -1374,7 +1374,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(fast_reconciler_pending{job=\"fast-reconciler\"}) + sum(fast_reconciler_orphan_outcomes{job=\"fast-reconciler\"})"
+          "expr": "sum(fast_kstreams_reconciler_pending{job=\"fast-reconciler\"}) + sum(fast_kstreams_reconciler_orphan_outcomes{job=\"fast-reconciler\"})"
         }
       ],
       "fieldConfig": {
@@ -1427,7 +1427,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(fast_reconciler_stuck{job=\"fast-reconciler\"})"
+          "expr": "sum(fast_kstreams_reconciler_stuck{job=\"fast-reconciler\"})"
         }
       ],
       "fieldConfig": {
@@ -1604,7 +1604,7 @@
             "uid": "${datasource}"
           },
           "expr": "max by (instance) (kafka_stream_thread_commit_latency_avg{job=\"fast-reconciler\"}) / 1000",
-          "legendFormat": "commit · {{instance}}"
+          "legendFormat": "commit Â· {{instance}}"
         },
         {
           "refId": "B",
@@ -1613,7 +1613,7 @@
             "uid": "${datasource}"
           },
           "expr": "max by (instance) (kafka_stream_task_punctuate_latency_avg{job=\"fast-reconciler\"}) / 1000",
-          "legendFormat": "scan · {{instance}}"
+          "legendFormat": "scan Â· {{instance}}"
         }
       ],
       "fieldConfig": {
@@ -1670,8 +1670,8 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (instance) (fast_reconciler_pending{job=\"fast-reconciler\"})",
-          "legendFormat": "waiting · {{instance}}"
+          "expr": "sum by (instance) (fast_kstreams_reconciler_pending{job=\"fast-reconciler\"})",
+          "legendFormat": "waiting Â· {{instance}}"
         },
         {
           "refId": "B",
@@ -1679,8 +1679,8 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (instance) (fast_reconciler_orphan_outcomes{job=\"fast-reconciler\"})",
-          "legendFormat": "outcome without send · {{instance}}"
+          "expr": "sum by (instance) (fast_kstreams_reconciler_orphan_outcomes{job=\"fast-reconciler\"})",
+          "legendFormat": "outcome without send Â· {{instance}}"
         }
       ],
       "fieldConfig": {

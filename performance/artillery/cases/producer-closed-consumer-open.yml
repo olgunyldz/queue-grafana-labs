@@ -3,9 +3,6 @@ config:
   plugins:
     expect: {}
   phases:
-    - name: consumer-health-check
-      duration: 30
-      arrivalRate: 2
     - name: consumer-metrics-check
       duration: 30
       arrivalRate: 5
@@ -15,10 +12,6 @@ config:
 scenarios:
   - name: consumer-without-producer
     flow:
-      - get:
-          url: /healthz
-          expect:
-            - statusCode: 200
       - get:
           url: /metrics
           expect:

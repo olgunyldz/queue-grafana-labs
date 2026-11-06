@@ -1,7 +1,7 @@
 # Normal FAST flow: producer and consumer are both up.
 # Every transfer sends fast_send, then its outcome (90% success, 10% failed).
 config:
-  target: http://localhost:18081
+  target: http://127.0.0.1:8080
   processor: ../processors/fast.cjs
   plugins:
     expect: {}
