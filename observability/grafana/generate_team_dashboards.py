@@ -648,8 +648,9 @@ def platform_services():
                "s", th=thresholds(("green", None), ("yellow", 0.1), ("red", 0.5)), decimals=3, graph=False), 4, 4)
     b.add(stat("Consumer hata (5 dk)", [(f"round(sum(increase(consumer_errors_total{cons}[5m]))) or vector(0)", "")],
                "short", th=thresholds(("green", None), ("red", 1)), graph=False), 4, 4)
-    b.add(stat("Consumer group üyeleri", [(f"sum by (consumergroup) (kafka_consumergroup_members{sel(consumergroup=MOCK_GROUPS)})", "{{consumergroup}}")],
-               "short", "Mock consumer'ın akış başına consumer group'ları.", up_th, graph=False, text_mode="value_and_name"), 4, 4)
+    b.add(stat("Sağlıklı abonelikler", [(f"min by (consumergroup) (consumer_subscription_up{cons})", "{{consumergroup}}")],
+               "short", "Akış başına consumer group: 1 = tüketim döngüsü çalışıyor ve Kafka'ya erişiliyor "
+               "(/healthz ile aynı kontrol). 0 ise /healthz 503 döner.", up_th, graph=False, text_mode="value_and_name"), 4, 4)
 
     b.row("Producer (API)")
     b.add(timeseries("Akışa göre istek / s", [

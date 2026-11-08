@@ -414,8 +414,8 @@
     },
     {
       "type": "stat",
-      "title": "Consumer group üyeleri",
-      "description": "Mock consumer'ın akış başına consumer group'ları.",
+      "title": "Sağlıklı abonelikler",
+      "description": "Akış başına consumer group: 1 = tüketim döngüsü çalışıyor ve Kafka'ya erişiliyor (/healthz ile aynı kontrol). 0 ise /healthz 503 döner.",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -427,7 +427,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "refId": "A",
-          "expr": "sum by (consumergroup) (kafka_consumergroup_members{consumergroup=~\"fast_incoming|fast_outgoing|havale|eft_incoming|eft_outgoing\"})",
+          "expr": "min by (consumergroup) (consumer_subscription_up{job=\"mock-consumer\"})",
           "legendFormat": "{{consumergroup}}",
           "range": false,
           "instant": true

@@ -23,10 +23,17 @@ public static class ConsumerApp
             Broker: Env.Get("KAFKA_BROKERS", "kafka:9092"),
             Subscriptions: ParseSubscriptions());
         builder.Services.AddSingleton(settings);
+        builder.Services.AddSingleton(new ConsumerHealth());
         builder.Services.AddHostedService<ConsumerWorker>();
 
         var app = builder.Build();
-        app.MapGet("/healthz", () => Results.Text("ok"));
+        // 200 while every subscription loop runs and Kafka is reachable, 503 otherwise (JSON details).
+        app.MapGet("/healthz", (ConsumerHealth health) =>
+        {
+            var report = health.Check();
+            return Results.Json(report, Json.Options,
+                statusCode: report.Status == "ok" ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
+        });
         app.MapMetrics("/metrics");
         return app;
     }
@@ -51,7 +58,7 @@ public static class ConsumerApp
 public sealed record ConsumerSettings(string Broker, ConsumerSubscription[] Subscriptions);
 public sealed record ConsumerSubscription(string Group, string[] Topics);
 
-public sealed class ConsumerWorker(ConsumerSettings settings, ILogger<ConsumerWorker> log) : BackgroundService
+public sealed class ConsumerWorker(ConsumerSettings settings, ConsumerHealth health, ILogger<ConsumerWorker> log) : BackgroundService
 {
     static readonly Counter Consumed = Metrics.CreateCounter("consumer_events_total",
         "Transfer events successfully consumed from Kafka, by HTTP endpoint.", "endpoint");
@@ -89,17 +96,22 @@ public sealed class ConsumerWorker(ConsumerSettings settings, ILogger<ConsumerWo
             // No cross-event state here, so any assignment works; cooperative-sticky rebalances incrementally
             // (replicas keep their other partitions while one moves) when replicas are added or removed.
             PartitionAssignmentStrategy = PartitionAssignmentStrategy.CooperativeSticky,
+            // Statistics carry the broker states that ConsumerHealth uses (also while no messages arrive).
+            StatisticsIntervalMs = 5000,
         })
             .SetPartitionsAssignedHandler((_, partitions) =>
                 log.LogInformation("partitions assigned: {Partitions}", string.Join(", ", partitions.Select(p => $"{p.Topic}[{p.Partition.Value}]"))))
             .SetErrorHandler((_, e) =>
             {
                 Errors.WithLabels("unknown", "read").Inc();
+                health.KafkaError(subscription.Group, e);
                 log.LogWarning("kafka error: {Reason}", e.Reason);
             })
+            .SetStatisticsHandler((_, json) => health.Statistics(subscription.Group, json))
             .Build();
 
         consumer.Subscribe(subscription.Topics);
+        health.Started(subscription.Group);
         log.LogInformation("consumer started; kafka={Broker} topics={Topics} group={Group} instance={Instance}",
             settings.Broker, string.Join(",", subscription.Topics), subscription.Group, Environment.MachineName);
 
@@ -137,9 +149,22 @@ public sealed class ConsumerWorker(ConsumerSettings settings, ILogger<ConsumerWo
         {
             // shutting down
         }
+        catch (Exception ex)
+        {
+            // The loop cannot continue: report it through /healthz and consumer_subscription_up.
+            health.Stopped(subscription.Group, ex.Message);
+            log.LogError(ex, "consume loop for group {Group} stopped", subscription.Group);
+        }
         finally
         {
-            consumer.Close(); // commits offsets and leaves the group cleanly
+            try
+            {
+                consumer.Close(); // commits offsets and leaves the group cleanly
+            }
+            catch (KafkaException ex)
+            {
+                log.LogWarning("close failed for group {Group}: {Error}", subscription.Group, ex.Error.Reason);
+            }
         }
     }
 
