@@ -77,7 +77,7 @@
       "title": "",
       "options": {
         "mode": "markdown",
-        "content": "### FAST · SRE panosu\nFAST kendi Flink cluster'ında çalışır: `flink-fast-jobmanager` (UI) ve `flink-fast-taskmanager`. **SLO'lar:** isteklerin %99,9'u bir sonuca ulaşır, transferlerin %99'u 5 s içinde tamamlanır, API 5xx oranı < %0,1. İş kaynaklı başarısızlıklar (ör. yetersiz bakiye) SLO ihlali değildir; bilgi amaçlı ayrıca gösterilir."
+        "content": "### FAST · SRE panosu\nFAST, paylaşılan Flink cluster'ında ayrı bir job olarak çalışır (`flink-fast-reconciler`, UI: http://localhost:18081). JobManager ve TaskManager'lar akışlar arasında ortaktır: **Durum** satırının cluster göstergeleri ve **Kaynaklar** bölümü tüm akışlar için aynıdır. **SLO'lar:** isteklerin %99,9'u bir sonuca ulaşır, transferlerin %99'u 5 s içinde tamamlanır, API 5xx oranı < %0,1. İş kaynaklı başarısızlıklar (ör. yetersiz bakiye) SLO ihlali değildir; bilgi amaçlı ayrıca gösterilir."
       },
       "transparent": true,
       "gridPos": {
@@ -103,8 +103,8 @@
     },
     {
       "type": "stat",
-      "title": "JobManager",
-      "description": "Prometheus'un JobManager'a ulaşabilmesi.",
+      "title": "JobManager (ortak)",
+      "description": "Paylaşılan cluster'ın JobManager'ı (UI, job yönetimi).",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -116,7 +116,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "refId": "A",
-          "expr": "min(up{job=\"flink-jobmanager\", flow=\"fast\"})",
+          "expr": "min(up{job=\"flink-jobmanager\"}) or vector(0)",
           "legendFormat": "__auto",
           "range": false,
           "instant": true
@@ -168,8 +168,8 @@
     },
     {
       "type": "stat",
-      "title": "TaskManager",
-      "description": "",
+      "title": "TaskManager (ortak)",
+      "description": "Kayıtlı TaskManager sayısı (beklenen 3). 2 ile job'lar çalışır ama bir kayıp daha karşılanamaz.",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -181,7 +181,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "refId": "A",
-          "expr": "min(up{job=\"flink-reconcilers\", flow=\"fast\"})",
+          "expr": "max(flink_jobmanager_numRegisteredTaskManagers) or vector(0)",
           "legendFormat": "__auto",
           "range": false,
           "instant": true
@@ -198,8 +198,12 @@
                 "value": null
               },
               {
-                "color": "green",
+                "color": "yellow",
                 "value": 1
+              },
+              {
+                "color": "green",
+                "value": 3
               }
             ]
           },
@@ -233,8 +237,8 @@
     },
     {
       "type": "stat",
-      "title": "Çalışan job",
-      "description": "",
+      "title": "Job çalışıyor",
+      "description": "`flink-fast-reconciler` job'u RUNNING mi? 0 ise flink-job-supervisor 30 s içinde checkpoint'ten yeniden başlatır (arayüzden iptal edildiyse başlatmaz).",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -246,7 +250,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "refId": "A",
-          "expr": "max(flink_jobmanager_numRunningJobs{flow=\"fast\"})",
+          "expr": "count(flink_jobmanager_job_uptime{flow=\"fast\"} > 0) or vector(0)",
           "legendFormat": "__auto",
           "range": false,
           "instant": true
@@ -429,8 +433,8 @@
     },
     {
       "type": "stat",
-      "title": "Boş slot",
-      "description": "Boş slot kalmazsa bir TaskManager kaybında job yeniden ayağa kalkamaz.",
+      "title": "Boş slot (ortak)",
+      "description": "Cluster genelinde boş slot. Normalde 6 (15 slot, 3 job x 3).",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -442,7 +446,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "refId": "A",
-          "expr": "max(flink_jobmanager_taskSlotsAvailable{flow=\"fast\"})",
+          "expr": "max(flink_jobmanager_taskSlotsAvailable)",
           "legendFormat": "__auto",
           "range": false,
           "instant": true
@@ -1614,7 +1618,7 @@
     },
     {
       "type": "row",
-      "title": "Kaynaklar",
+      "title": "Kaynaklar (paylaşılan cluster)",
       "id": 26,
       "collapsed": false,
       "gridPos": {
@@ -1628,7 +1632,7 @@
     {
       "type": "timeseries",
       "title": "CPU",
-      "description": "",
+      "description": "Tüm akışların ortak kullandığı JobManager ve TaskManager'lar.",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -1640,7 +1644,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "refId": "A",
-          "expr": "max by (host) (flink_taskmanager_Status_JVM_CPU_Load{flow=\"fast\"})",
+          "expr": "max by (host) (flink_taskmanager_Status_JVM_CPU_Load)",
           "legendFormat": "TaskManager {{host}}",
           "range": true,
           "instant": false
@@ -1651,7 +1655,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "refId": "B",
-          "expr": "max(flink_jobmanager_Status_JVM_CPU_Load{flow=\"fast\"})",
+          "expr": "max(flink_jobmanager_Status_JVM_CPU_Load)",
           "legendFormat": "JobManager",
           "range": true,
           "instant": false
@@ -1732,7 +1736,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "refId": "A",
-          "expr": "max by (host) (flink_taskmanager_Status_JVM_Memory_Heap_Used{flow=\"fast\"} / flink_taskmanager_Status_JVM_Memory_Heap_Max{flow=\"fast\"})",
+          "expr": "max by (host) (flink_taskmanager_Status_JVM_Memory_Heap_Used / flink_taskmanager_Status_JVM_Memory_Heap_Max)",
           "legendFormat": "TaskManager {{host}}",
           "range": true,
           "instant": false
@@ -1743,7 +1747,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "refId": "B",
-          "expr": "max(flink_jobmanager_Status_JVM_Memory_Heap_Used{flow=\"fast\"} / flink_jobmanager_Status_JVM_Memory_Heap_Max{flow=\"fast\"})",
+          "expr": "max(flink_jobmanager_Status_JVM_Memory_Heap_Used / flink_jobmanager_Status_JVM_Memory_Heap_Max)",
           "legendFormat": "JobManager",
           "range": true,
           "instant": false
@@ -1824,7 +1828,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "refId": "A",
-          "expr": "max by (host) (flink_taskmanager_Status_JVM_GarbageCollector_All_TimeMsPerSecond{flow=\"fast\"})",
+          "expr": "max by (host) (flink_taskmanager_Status_JVM_GarbageCollector_All_TimeMsPerSecond)",
           "legendFormat": "TaskManager {{host}}",
           "range": true,
           "instant": false
@@ -1928,7 +1932,7 @@
     {
       "type": "timeseries",
       "title": "Hata / uyarı log sayısı",
-      "description": "",
+      "description": "Paylaşılan Flink container'larının bu akışın job adını içeren hata satırları.",
       "datasource": {
         "type": "loki",
         "uid": "P8E80F9AEF21F6940"
@@ -1940,7 +1944,7 @@
             "uid": "P8E80F9AEF21F6940"
           },
           "refId": "A",
-          "expr": "sum by (container) (count_over_time({container=~\".*flink-fast-.*\"} |~ \"(?i)(error|exception)\" [1m]))",
+          "expr": "sum by (container) (count_over_time({container=~\".*flink-(jobmanager|taskmanager|job-supervisor).*\"} |~ \"flink[-_]fast[-_]reconciler|flow=fast\" |~ \"(?i)(error|exception)\" [1m]))",
           "legendFormat": "{{container}}",
           "queryType": "range"
         }

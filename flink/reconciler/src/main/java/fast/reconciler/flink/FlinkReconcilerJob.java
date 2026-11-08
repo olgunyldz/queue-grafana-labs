@@ -2,6 +2,8 @@ package fast.reconciler.flink;
 
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.serialization.SerializationSchema;
+import org.apache.flink.configuration.CheckpointingOptions;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.connector.kafka.sink.KafkaRecordSerializationSchema;
@@ -18,8 +20,9 @@ import java.util.Properties;
  * Kafka request/success/failed topics -> keyBy(transaction_id) -> FlinkReconciliationFunction
  * -> matched / unmatched topics (exactly-once).
  *
- * <p>Runs in application mode: each flow has its own Flink cluster and therefore its own state,
- * checkpoints, consumer group, Kafka transactional ids and metrics endpoint.
+ * <p>All flows run as separate jobs in one Flink session cluster: each job has its own state,
+ * checkpoints (CHECKPOINT_DIR, e.g. /opt/flink/checkpoints/fast), consumer group and Kafka
+ * transactional ids; they share the JobManager and the TaskManagers.
  *
  * <p>Operators have fixed uids so state can be restored from a savepoint after code changes.
  */
@@ -29,7 +32,13 @@ public final class FlinkReconcilerJob {
 
     public static void main(String[] args) throws Exception {
         FlinkReconcilerConfig config = FlinkReconcilerConfig.fromEnvironment();
-        StreamExecutionEnvironment environment = StreamExecutionEnvironment.getExecutionEnvironment();
+        Configuration jobConfig = new Configuration();
+        String checkpointDir = System.getenv("CHECKPOINT_DIR");
+        if (checkpointDir != null && !checkpointDir.isBlank()) {
+            // Job-level checkpoint directory: one per flow in a shared cluster.
+            jobConfig.set(CheckpointingOptions.CHECKPOINTS_DIRECTORY, checkpointDir.trim());
+        }
+        StreamExecutionEnvironment environment = StreamExecutionEnvironment.getExecutionEnvironment(jobConfig);
         environment.enableCheckpointing(config.checkpointIntervalMs());
         environment.setParallelism(config.parallelism());
 

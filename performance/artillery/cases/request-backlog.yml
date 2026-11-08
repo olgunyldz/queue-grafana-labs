@@ -1,5 +1,5 @@
 # Request backlog: only FAST incoming requests are sent (10 -> 100/s). Stop the FAST reconciler
-# (docker compose stop flink-fast-taskmanager) first: lag on fast_incoming_request grows and drains
+# (docker compose stop flink-taskmanager; this pauses all three jobs) first: lag on fast_incoming_request grows and drains
 # once it starts again; stuck transfers grow after 30 s.
 config:
   target: http://127.0.0.1:8080

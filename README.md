@@ -53,10 +53,9 @@ Eşleştirmeyi Flink yapar: her akışın (FAST, Havale, EFT) kendi Flink cluste
 | `producer-lb` | nginx | Producer replica’ları için tek giriş noktası | `http://127.0.0.1:8080` |
 | `mock-consumer` | .NET 10 | Her akışın topic'lerini kendi consumer group'uyla okur; `/healthz` | İç port `2114` |
 | `flink-checkpoint-init` | Flink image | Flink image’ını build eder, akış başına checkpoint klasörlerini hazırlar | Tek seferlik servis |
-| `flink-fast-jobmanager` | Apache Flink 2.1.3 | FAST cluster’ı; FAST job’unu application mode’da çalıştırır | `http://localhost:18082` |
-| `flink-havale-jobmanager` | Apache Flink 2.1.3 | Havale cluster’ı; Havale job’unu çalıştırır | `http://localhost:18083` |
-| `flink-eft-jobmanager` | Apache Flink 2.1.3 | EFT cluster’ı; EFT job’unu çalıştırır | `http://localhost:18084` |
-| `flink-<flow>-taskmanager` | Apache Flink 2.1.3 | İlgili akışın task’lerini çalıştırır (4 slot) | Metrics portu `9249` |
+| `flink-jobmanager` | Apache Flink 2.1.3 | Paylaşılan session cluster’ı; UI ve job yönetimi | `http://localhost:18081` |
+| `flink-taskmanager` (3 replika) | Apache Flink 2.1.3 | Job task’lerini çalıştırır (5 slot) | Metrics portu `9249` |
+| `flink-job-supervisor` | Flink image | FAST, Havale ve EFT job’larını çalışır tutar; checkpoint’ten yeniden başlatır | Sürekli çalışır |
 | `kafka-exporter` | kafka-exporter | Consumer group lag ve offset metrikleri | `9308` |
 | `kafka-jmx-exporter` | prometheus/jmx_exporter 1.7.0 (resmi jar, checksum ile sabit) | Kafka broker metrikleri | `5556` |
 | `prometheus` | Prometheus | Metrikleri scrape eder ve saklar | `http://localhost:9090` |
@@ -108,17 +107,17 @@ Durumu kontrol etmek için:
 
 ```powershell
 docker compose ps
-docker compose logs -f flink-fast-jobmanager
+docker compose logs -f flink-jobmanager
 docker compose logs -f mock-consumer
 ```
 
-Flink job listesini görmek için (Havale `18083`, EFT `18084`):
+Flink job listesini görmek için:
 
 ```powershell
-Invoke-RestMethod http://localhost:18082/jobs/overview
+Invoke-RestMethod http://localhost:18081/jobs/overview
 ```
 
-Flink UI: FAST [http://localhost:18082](http://localhost:18082), Havale [http://localhost:18083](http://localhost:18083), EFT [http://localhost:18084](http://localhost:18084)
+Flink UI (üç job tek yerde): [http://localhost:18081](http://localhost:18081)
 
 Grafana varsayılan giriş bilgileri:
 
@@ -166,11 +165,11 @@ Tek kod tabanı, akış başına ayrı job ve ayrı cluster. Job’un entry poin
 
 | Akış (`FLOW`) | Input topic’leri | Output topic’leri | Consumer group / job adı | UI |
 |---|---|---|---|---|
-| `fast` | `fast_{incoming,outgoing}_{request,success,failed}` | `fast_transfer_matched`, `fast_transfer_unmatched` | `flink-fast-reconciler` | `18082` |
-| `havale` | `havale_{request,success,failed}` | `havale_transfer_matched`, `havale_transfer_unmatched` | `flink-havale-reconciler` | `18083` |
-| `eft` | `eft_{incoming,outgoing}_{request,success,failed}` | `eft_transfer_matched`, `eft_transfer_unmatched` | `flink-eft-reconciler` | `18084` |
+| `fast` | `fast_{incoming,outgoing}_{request,success,failed}` | `fast_transfer_matched`, `fast_transfer_unmatched` | `flink-fast-reconciler` |
+| `havale` | `havale_{request,success,failed}` | `havale_transfer_matched`, `havale_transfer_unmatched` | `flink-havale-reconciler` |
+| `eft` | `eft_{incoming,outgoing}_{request,success,failed}` | `eft_transfer_matched`, `eft_transfer_unmatched` | `flink-eft-reconciler` |
 
-Flink ortam değişkenleri (JobManager servisine verilir; application mode’da job orada başlar):
+Job ayarları, job’u gönderen `flink-job-supervisor` servisinde verilir; `FLOW` her job için supervisor tarafından ayarlanır:
 
 | Environment variable | Varsayılan | Açıklama |
 |---|---:|---|
@@ -186,15 +185,15 @@ Flink ortam değişkenleri (JobManager servisine verilir; application mode’da 
 
 Süreler `500ms`, `30s`, `10m`, `1h` biçiminde verilir; geçersiz bir değerde job açık bir hata mesajıyla başlamaz.
 
-**Restart ve state:** JobManager’ın giriş noktası [start-job.sh](./flink/reconciler/docker/start-job.sh) job’u akışın en son tamamlanmış checkpoint’inden (`volumes/flink-checkpoints/<flow>/<job-id>/chk-N`) başlatır; JobManager restart’ı veya `docker compose up` sonrasında bekleyen transferler kaybolmaz. Eski çalıştırmaların checkpoint klasörleri başlangıçta silinir. Boş state’le başlatmak için JobManager’a `RESTORE_FROM_CHECKPOINT=false` verin. TaskManager veya Kafka kesintilerinde Flink job’u kendi içinde son checkpoint’ten yeniden başlatır.
+**Restart ve state:** [supervise-jobs.sh](./flink/reconciler/docker/supervise-jobs.sh) her 30 saniyede job’ların çalışıp çalışmadığına bakar; çalışmıyorsa akışın en son tamamlanmış checkpoint’inden yeniden gönderir (`volumes/flink-checkpoints/<flow>/<job-id>/chk-N`). JobManager restart’ından sonra bekleyen transferler kaybolmaz. Arayüzden iptal edilen job kendiliğinden geri gelmez; `docker compose exec flink-job-supervisor /opt/flink/docker/supervise-jobs.sh start <flow>` ile başlatılır.
 
 Flink job’unu kontrol etmek için:
 
 ```powershell
-Invoke-RestMethod http://localhost:18082/jobs/overview
+Invoke-RestMethod http://localhost:18081/jobs/overview
 ```
 
-Beklenen job adı `flink-<flow>-reconciler`, beklenen durum `RUNNING` olmalıdır (her akışın kendi portunda).
+Beklenen job adları `flink-<flow>-reconciler`; üçü de `RUNNING` olmalıdır.
 
 ## Grafana ve gözlemlenebilirlik
 
@@ -307,7 +306,7 @@ flink/reconciler/            Apache Flink reconciler (FAST, Havale, EFT; FLOW il
   src/main/                   Flink job, Flow varsayılanları, process function ve metrics
   src/test/                   Flink reconciliation testleri
   conf/                       Flink runtime config
-  docker/start-job.sh         JobManager giriş noktası (son checkpoint'ten devam)
+  docker/supervise-jobs.sh    Job denetçisi (job’ları çalışır tutar, checkpoint’ten devam eder)
 
 observability/
   prometheus.yml             Prometheus scrape ayarları
@@ -385,13 +384,13 @@ docker compose restart grafana
 ### Flink job görünmüyor
 
 ```powershell
-Invoke-RestMethod http://localhost:18082/overview
-Invoke-RestMethod http://localhost:18082/jobs/overview
-docker compose logs --tail=100 flink-fast-jobmanager
-docker compose logs --tail=100 flink-fast-taskmanager
+Invoke-RestMethod http://localhost:18081/overview
+Invoke-RestMethod http://localhost:18081/jobs/overview
+docker compose logs --tail=100 flink-jobmanager
+docker compose logs --tail=100 flink-job-supervisor
 ```
 
-Beklenen job adı `flink-fast-reconciler`, durumu `RUNNING` olmalıdır. Havale ve EFT için `18083` / `18084` portlarını ve `flink-havale-*` / `flink-eft-*` servislerini kullanın. Application mode’da job JobManager ile birlikte başlar; JobManager yeniden başlarsa job da yeniden başlar.
+Beklenen job adları `flink-fast-reconciler`, `flink-havale-reconciler`, `flink-eft-reconciler`; üçü de `RUNNING` olmalıdır. Job’lar tek JobManager’da olduğu için Havale ve EFT için ayrı port yoktur.
 
 ### Metrik var ama dashboard boş
 

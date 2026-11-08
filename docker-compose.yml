@@ -1,37 +1,12 @@
-# Shared settings of the per-flow Flink clusters (see the Flink section below).
+# Shared settings of the Flink session cluster (see the Flink section below).
 x-flink-image: &flink-image
   image: flink-reconciler:local
   pull_policy: never
   restart: unless-stopped
   volumes:
     - ./volumes/flink-checkpoints:/opt/flink/checkpoints
-  expose:
-    - "9249"
-
-x-flink-jobmanager: &flink-jobmanager
-  <<: *flink-image
-  # Application mode: the JobManager runs the job in /opt/flink/usrlib. start-job.sh resumes it from
-  # the flow's latest checkpoint (volumes/flink-checkpoints/<flow>); RESTORE_FROM_CHECKPOINT=false
-  # starts with empty state.
-  entrypoint: [ "/opt/flink/docker/start-job.sh" ]
-  depends_on:
-    kafka-init:
-      condition: service_completed_successfully
-    flink-checkpoint-init:
-      condition: service_completed_successfully
-
-x-flink-taskmanager: &flink-taskmanager
-  <<: *flink-image
-  command: taskmanager
-
-# Job settings shared by all flows; FLOW and the cluster address are set per flow.
-x-flink-job-env: &flink-job-env
-  KAFKA_BROKERS: kafka:9092
-  PENDING_THRESHOLD: 30s
-  MATCH_TTL: 10m
-  CHECKPOINT_INTERVAL: 10s
-  PARALLELISM: "3"
-  JAVA_TOOL_OPTIONS: --add-opens=java.base/java.util=ALL-UNNAMED
+  environment:
+    JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
 
 services:
   kafka:
@@ -149,11 +124,12 @@ services:
         condition: service_completed_successfully
 
   # ---- Flink reconcilers -------------------------------------------------------------------
-  # One image (flink/reconciler), one Flink cluster per flow in application mode: the job starts
-  # with its JobManager, so there is no separate submit step and no double submission on "up".
-  # Each flow has its own JobManager, TaskManager(s), state, checkpoint directory, consumer group,
-  # Kafka transactional ids and metrics endpoint. FLOW selects the flow's topics and ids.
-  # Flink UI: FAST http://localhost:18082, Havale :18083, EFT :18084
+  # One Flink session cluster (one JobManager / UI, three TaskManagers) running one job per flow:
+  # flink-fast-reconciler, flink-havale-reconciler, flink-eft-reconciler. Each job has its own state,
+  # checkpoint directory (volumes/flink-checkpoints/<flow>), consumer group and Kafka transactional
+  # ids; the JobManager and the TaskManagers are shared. flink-job-supervisor submits the jobs and
+  # resubmits them from their latest checkpoint when they are gone (e.g. after a JobManager restart).
+  # Flink UI (all jobs): http://localhost:18081
 
   # Builds flink-reconciler:local once (the other Flink services reuse it with pull_policy: never;
   # building one tag from several services in parallel fails with "image ... already exists")
@@ -168,67 +144,60 @@ services:
     volumes:
       - ./volumes/flink-checkpoints:/opt/flink/checkpoints
 
-  flink-fast-jobmanager:
-    <<: *flink-jobmanager
-    environment:
-      <<: *flink-job-env
-      FLOW: fast
-      JOB_MANAGER_RPC_ADDRESS: flink-fast-jobmanager
-      FLINK_PROPERTIES: |
-        state.checkpoints.dir: file:///opt/flink/checkpoints/fast
+  flink-jobmanager:
+    <<: *flink-image
+    command: jobmanager
     ports:
-      - "18082:8081"
-
-  flink-fast-taskmanager:
-    <<: *flink-taskmanager
-    environment:
-      JOB_MANAGER_RPC_ADDRESS: flink-fast-jobmanager
-      FLINK_PROPERTIES: |
-        state.checkpoints.dir: file:///opt/flink/checkpoints/fast
+      - "18081:8081"
+    expose:
+      - "9249"
     depends_on:
-      flink-fast-jobmanager:
+      flink-checkpoint-init:
+        condition: service_completed_successfully
+
+  # 3 x 5 slots = 15; the three jobs use 3 x 3 = 9. If one TaskManager is lost, 10 slots remain,
+  # so all three jobs can still be scheduled.
+  flink-taskmanager:
+    <<: *flink-image
+    command: taskmanager
+    environment:
+      JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
+      FLINK_PROPERTIES: |
+        taskmanager.numberOfTaskSlots: 5
+    deploy:
+      replicas: 3
+    expose:
+      - "9249"
+    depends_on:
+      flink-jobmanager:
         condition: service_started
 
-  flink-havale-jobmanager:
-    <<: *flink-jobmanager
+  # Keeps one job per flow running (docker/supervise-jobs.sh). A job cancelled from the UI stays
+  # stopped; start it again with:
+  #   docker compose exec flink-job-supervisor /opt/flink/docker/supervise-jobs.sh start <flow>
+  flink-job-supervisor:
+    image: flink-reconciler:local
+    pull_policy: never
+    restart: unless-stopped
+    user: "9999:9999"
+    entrypoint: [ "/opt/flink/docker/supervise-jobs.sh" ]
+    volumes:
+      - ./volumes/flink-checkpoints:/opt/flink/checkpoints
     environment:
-      <<: *flink-job-env
-      FLOW: havale
-      JOB_MANAGER_RPC_ADDRESS: flink-havale-jobmanager
-      FLINK_PROPERTIES: |
-        state.checkpoints.dir: file:///opt/flink/checkpoints/havale
-    ports:
-      - "18083:8081"
-
-  flink-havale-taskmanager:
-    <<: *flink-taskmanager
-    environment:
-      JOB_MANAGER_RPC_ADDRESS: flink-havale-jobmanager
-      FLINK_PROPERTIES: |
-        state.checkpoints.dir: file:///opt/flink/checkpoints/havale
+      JOBMANAGER: flink-jobmanager:8081
+      FLOWS: fast havale eft
+      PARALLELISM: "3"
+      SUPERVISE_INTERVAL: "30"
+      # Job settings, read by each job's main() when it is submitted:
+      KAFKA_BROKERS: kafka:9092
+      PENDING_THRESHOLD: 30s
+      MATCH_TTL: 10m
+      CHECKPOINT_INTERVAL: 10s
+      JAVA_TOOL_OPTIONS: --add-opens=java.base/java.util=ALL-UNNAMED
     depends_on:
-      flink-havale-jobmanager:
-        condition: service_started
-
-  flink-eft-jobmanager:
-    <<: *flink-jobmanager
-    environment:
-      <<: *flink-job-env
-      FLOW: eft
-      JOB_MANAGER_RPC_ADDRESS: flink-eft-jobmanager
-      FLINK_PROPERTIES: |
-        state.checkpoints.dir: file:///opt/flink/checkpoints/eft
-    ports:
-      - "18084:8081"
-
-  flink-eft-taskmanager:
-    <<: *flink-taskmanager
-    environment:
-      JOB_MANAGER_RPC_ADDRESS: flink-eft-jobmanager
-      FLINK_PROPERTIES: |
-        state.checkpoints.dir: file:///opt/flink/checkpoints/eft
-    depends_on:
-      flink-eft-jobmanager:
+      kafka-init:
+        condition: service_completed_successfully
+      flink-jobmanager:
         condition: service_started
 
   prometheus:
@@ -242,9 +211,7 @@ services:
     depends_on:
       - mock-producer
       - mock-consumer
-      - flink-fast-jobmanager
-      - flink-havale-jobmanager
-      - flink-eft-jobmanager
+      - flink-jobmanager
       - kafka-jmx-exporter
       - kafka-exporter
 

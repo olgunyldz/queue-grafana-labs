@@ -1264,7 +1264,7 @@
             "uid": "P8E80F9AEF21F6940"
           },
           "refId": "A",
-          "expr": "sum by (container) (count_over_time({container=~\".*flink-havale-.*\"} |~ \"(?i)(error|exception|warn)\" !~ \"Name collision\" [1m]))",
+          "expr": "sum by (container) (count_over_time({container=~\".*flink-(jobmanager|taskmanager|job-supervisor).*\"} |~ \"flink[-_]havale[-_]reconciler|flow=havale\" |~ \"(?i)(error|exception|warn)\" !~ \"Name collision\" [1m]))",
           "legendFormat": "{{container}}",
           "queryType": "range"
         }
@@ -1325,7 +1325,7 @@
     {
       "type": "logs",
       "title": "Flink (havale) hata ve uyarıları",
-      "description": "",
+      "description": "Paylaşılan Flink container'larının bu akışın job adını içeren satırları. Cluster genelindeki hatalar Platform · Flink panosundadır.",
       "datasource": {
         "type": "loki",
         "uid": "P8E80F9AEF21F6940"
@@ -1337,7 +1337,7 @@
             "uid": "P8E80F9AEF21F6940"
           },
           "refId": "A",
-          "expr": "{container=~\".*flink-havale-.*\"} |~ \"(?i)(error|exception|warn)\" !~ \"Name collision\"",
+          "expr": "{container=~\".*flink-(jobmanager|taskmanager|job-supervisor).*\"} |~ \"flink[-_]havale[-_]reconciler|flow=havale\" |~ \"(?i)(error|exception|warn)\" !~ \"Name collision\"",
           "queryType": "range"
         }
       ],

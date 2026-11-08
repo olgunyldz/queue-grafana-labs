@@ -25,11 +25,12 @@ scrape_configs:
     relabel_configs:
       - target_label: impl
         replacement: dotnet
-  # Flink TaskManagers of every per-flow cluster (reconciler operator metrics live here).
-  # flow (fast | havale | eft) is taken from the service name: flink-<flow>-taskmanager.
+  # Flink TaskManagers of the session cluster (reconciler operator metrics live here).
+  # flow (fast | havale | eft) is taken from the job name (flink_<flow>_reconciler) of job-level
+  # metrics; TaskManager-wide metrics (CPU, heap) have no flow.
   - job_name: flink-reconcilers
     dns_sd_configs:
-      - names: [flink-fast-taskmanager, flink-havale-taskmanager, flink-eft-taskmanager]
+      - names: [flink-taskmanager]
         type: A
         port: 9249
         refresh_interval: 10s
@@ -38,13 +39,13 @@ scrape_configs:
         replacement: flink
       - target_label: flink_component
         replacement: taskmanager
-      - source_labels: [__meta_dns_name]
-        regex: flink-(.+)-taskmanager
-        target_label: flow
     # Flink's Prometheus reporter puts the MetricGroup path and the label keys into the metric name,
     # e.g. flink_taskmanager_job_task_operator_reconciler_outcome_role_bank_code_bank_transfers_total.
     # Map them back to reconciler_<metric> (the metric contract used by dashboards and alerts).
     metric_relabel_configs:
+      - source_labels: [job_name]
+        regex: flink_(.+)_reconciler
+        target_label: flow
       - source_labels: [__name__]
         # invalid_events_total is registered by the Kafka source's deserializer (extra "deserializer" scope).
         regex: flink_taskmanager_job_task_operator_(?:deserializer_)?reconciler_(?:.*_)?(transfers_total|volume_try_total|completion_seconds_bucket|completion_seconds_count|completion_seconds_sum|amount_try_bucket|amount_try_count|amount_try_sum|failures_total|unmatched_total|duplicates_total|invalid_events_total|pending|stuck|orphan_outcomes)
@@ -182,10 +183,11 @@ scrape_configs:
         regex: 'Vakif_Katilim'
         target_label: sender_bank
         replacement: 'Vakıf Katılım'
-  # Flink JobManagers of every per-flow cluster (job status, checkpoints, restarts).
+  # Flink JobManager of the session cluster (job status, checkpoints, restarts). Job metrics get
+  # flow from their job name; cluster metrics (slots, TaskManagers, running jobs) have no flow.
   - job_name: flink-jobmanager
     dns_sd_configs:
-      - names: [flink-fast-jobmanager, flink-havale-jobmanager, flink-eft-jobmanager]
+      - names: [flink-jobmanager]
         type: A
         port: 9249
         refresh_interval: 10s
@@ -194,8 +196,9 @@ scrape_configs:
         replacement: flink
       - target_label: flink_component
         replacement: jobmanager
-      - source_labels: [__meta_dns_name]
-        regex: flink-(.+)-jobmanager
+    metric_relabel_configs:
+      - source_labels: [job_name]
+        regex: flink_(.+)_reconciler
         target_label: flow
   - job_name: kafka
     static_configs:

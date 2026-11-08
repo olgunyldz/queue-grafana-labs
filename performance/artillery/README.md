@@ -62,9 +62,9 @@ Runner her case için `reports/` altında bir JSON raporu üretir. Tüm case'ler
 - **`request-backlog`:** backlog'un birikmesi için FAST reconciler'ı testten önce durdurun ve sonra başlatın:
 
   ```powershell
-  docker compose stop flink-fast-taskmanager
+  docker compose stop flink-taskmanager
   npm run test:request-backlog
-  docker compose start flink-fast-taskmanager
+  docker compose start flink-taskmanager
   ```
 
   Reconciler çalışıyorsa senaryo yalnızca normal tüketim altında trafik üretir. Diğer akışlar etkilenmez.

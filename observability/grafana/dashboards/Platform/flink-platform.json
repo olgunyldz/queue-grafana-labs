@@ -1,7 +1,7 @@
 {
   "uid": "flink-platform",
   "title": "Platform · Flink (tüm akışlar)",
-  "description": "FAST, Havale ve EFT Flink cluster'larının yan yana sağlık görünümü.",
+  "description": "Paylaşılan Flink cluster'ı ve içindeki FAST, Havale, EFT job'ları.",
   "tags": [
     "platform"
   ],
@@ -118,7 +118,7 @@
       "title": "",
       "options": {
         "mode": "markdown",
-        "content": "### Platform · Flink\nHer akış kendi Flink cluster'ında çalışır (application mode): `flink-<akış>-jobmanager` + `flink-<akış>-taskmanager`. Bu pano üç cluster'ı yan yana gösterir; bir akışın ayrıntısı için o akışın **SRE** panosuna geçin (UI: FAST `:18082`, Havale `:18083`, EFT `:18084`)."
+        "content": "### Platform · Flink\nTek bir Flink session cluster'ı (1 JobManager, 3 TaskManager x 5 slot) üç ayrı job çalıştırır: `flink-fast-reconciler`, `flink-havale-reconciler`, `flink-eft-reconciler`. Yönetim arayüzü: http://localhost:18081. `flink-job-supervisor` job'ları çalışır tutar. Bir akışın ayrıntısı için o akışın **SRE** panosuna geçin."
       },
       "transparent": true,
       "gridPos": {
@@ -131,7 +131,7 @@
     },
     {
       "type": "row",
-      "title": "Cluster durumu (akış başına)",
+      "title": "Cluster",
       "id": 2,
       "collapsed": false,
       "gridPos": {
@@ -145,7 +145,7 @@
     {
       "type": "stat",
       "title": "JobManager",
-      "description": "",
+      "description": "UI ve job yönetimi; düşerse tüm job'lar durur, flink-job-supervisor geri gelince yeniden başlatır.",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -157,8 +157,8 @@
             "uid": "PBFA97CFB590B2093"
           },
           "refId": "A",
-          "expr": "min by (flow) (up{job=\"flink-jobmanager\", flow=~\"$flow\"})",
-          "legendFormat": "{{flow}}",
+          "expr": "min(up{job=\"flink-jobmanager\"}) or vector(0)",
+          "legendFormat": "__auto",
           "range": false,
           "instant": true
         }
@@ -195,14 +195,14 @@
         },
         "colorMode": "value",
         "graphMode": "none",
-        "textMode": "value_and_name",
+        "textMode": "auto",
         "justifyMode": "auto",
         "orientation": "auto"
       },
       "gridPos": {
         "x": 0,
         "y": 4,
-        "w": 6,
+        "w": 4,
         "h": 4
       },
       "id": 3
@@ -210,7 +210,7 @@
     {
       "type": "stat",
       "title": "TaskManager",
-      "description": "",
+      "description": "Kayıtlı TaskManager (beklenen 3). 2 ile job'lar çalışır ama bir kayıp daha karşılanamaz.",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -222,8 +222,8 @@
             "uid": "PBFA97CFB590B2093"
           },
           "refId": "A",
-          "expr": "min by (flow) (up{job=\"flink-reconcilers\", flow=~\"$flow\"})",
-          "legendFormat": "{{flow}}",
+          "expr": "max(flink_jobmanager_numRegisteredTaskManagers) or vector(0)",
+          "legendFormat": "__auto",
           "range": false,
           "instant": true
         }
@@ -239,8 +239,12 @@
                 "value": null
               },
               {
-                "color": "green",
+                "color": "yellow",
                 "value": 1
+              },
+              {
+                "color": "green",
+                "value": 3
               }
             ]
           },
@@ -260,22 +264,22 @@
         },
         "colorMode": "value",
         "graphMode": "none",
-        "textMode": "value_and_name",
+        "textMode": "auto",
         "justifyMode": "auto",
         "orientation": "auto"
       },
       "gridPos": {
-        "x": 6,
+        "x": 4,
         "y": 4,
-        "w": 6,
+        "w": 4,
         "h": 4
       },
       "id": 4
     },
     {
       "type": "stat",
-      "title": "Çalışan job",
-      "description": "",
+      "title": "Slot",
+      "description": "Normalde 6 boş / 15 toplam (3 job x 3 slot).",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -287,8 +291,19 @@
             "uid": "PBFA97CFB590B2093"
           },
           "refId": "A",
-          "expr": "max by (flow) (flink_jobmanager_numRunningJobs{flow=~\"$flow\"})",
-          "legendFormat": "{{flow}}",
+          "expr": "max(flink_jobmanager_taskSlotsAvailable)",
+          "legendFormat": "boş",
+          "range": false,
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "B",
+          "expr": "max(flink_jobmanager_taskSlotsTotal)",
+          "legendFormat": "toplam",
           "range": false,
           "instant": true
         }
@@ -300,12 +315,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
-              },
-              {
                 "color": "green",
-                "value": 1
+                "value": null
               }
             ]
           },
@@ -330,7 +341,7 @@
         "orientation": "auto"
       },
       "gridPos": {
-        "x": 12,
+        "x": 8,
         "y": 4,
         "w": 6,
         "h": 4
@@ -339,8 +350,8 @@
     },
     {
       "type": "stat",
-      "title": "Boş slot",
-      "description": "0 ise bir TaskManager kaybında job yeniden ayağa kalkamaz.",
+      "title": "Job çalışıyor",
+      "description": "Akış başına RUNNING job. Eksik akış: job çalışmıyor.",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -352,7 +363,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "refId": "A",
-          "expr": "max by (flow) (flink_jobmanager_taskSlotsAvailable{flow=~\"$flow\"})",
+          "expr": "count by (flow) (flink_jobmanager_job_uptime{flow=~\"$flow\"} > 0)",
           "legendFormat": "{{flow}}",
           "range": false,
           "instant": true
@@ -395,12 +406,25 @@
         "orientation": "auto"
       },
       "gridPos": {
-        "x": 18,
+        "x": 14,
         "y": 4,
-        "w": 6,
+        "w": 10,
         "h": 4
       },
       "id": 6
+    },
+    {
+      "type": "row",
+      "title": "Job'lar (akış başına)",
+      "id": 7,
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
     },
     {
       "type": "stat",
@@ -457,11 +481,11 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 8,
+        "y": 9,
         "w": 6,
         "h": 4
       },
-      "id": 7
+      "id": 8
     },
     {
       "type": "stat",
@@ -527,11 +551,11 @@
       },
       "gridPos": {
         "x": 6,
-        "y": 8,
+        "y": 9,
         "w": 6,
         "h": 4
       },
-      "id": 8
+      "id": 9
     },
     {
       "type": "stat",
@@ -596,11 +620,11 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 8,
+        "y": 9,
         "w": 6,
         "h": 4
       },
-      "id": 9
+      "id": 10
     },
     {
       "type": "stat",
@@ -665,20 +689,20 @@
       },
       "gridPos": {
         "x": 18,
-        "y": 8,
+        "y": 9,
         "w": 6,
         "h": 4
       },
-      "id": 10
+      "id": 11
     },
     {
       "type": "row",
       "title": "İşleme",
-      "id": 11,
+      "id": 12,
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 12,
+        "y": 13,
         "w": 24,
         "h": 1
       },
@@ -752,11 +776,11 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 13,
+        "y": 14,
         "w": 8,
         "h": 8
       },
-      "id": 12
+      "id": 13
     },
     {
       "type": "timeseries",
@@ -833,11 +857,11 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 13,
+        "y": 14,
         "w": 8,
         "h": 8
       },
-      "id": 13
+      "id": 14
     },
     {
       "type": "timeseries",
@@ -907,20 +931,20 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 13,
+        "y": 14,
         "w": 8,
         "h": 8
       },
-      "id": 14
+      "id": 15
     },
     {
       "type": "row",
       "title": "Checkpoint",
-      "id": 15,
+      "id": 16,
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 21,
+        "y": 22,
         "w": 24,
         "h": 1
       },
@@ -1001,11 +1025,11 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 22,
+        "y": 23,
         "w": 8,
         "h": 7
       },
-      "id": 16
+      "id": 17
     },
     {
       "type": "timeseries",
@@ -1075,11 +1099,11 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 22,
+        "y": 23,
         "w": 8,
         "h": 7
       },
-      "id": 17
+      "id": 18
     },
     {
       "type": "timeseries",
@@ -1149,20 +1173,20 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 22,
+        "y": 23,
         "w": 8,
         "h": 7
       },
-      "id": 18
+      "id": 19
     },
     {
       "type": "row",
-      "title": "Kaynaklar",
-      "id": 19,
+      "title": "Kaynaklar (TaskManager başına)",
+      "id": 20,
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 29,
+        "y": 30,
         "w": 24,
         "h": 1
       },
@@ -1183,8 +1207,8 @@
             "uid": "PBFA97CFB590B2093"
           },
           "refId": "A",
-          "expr": "max by (flow) (flink_taskmanager_Status_JVM_CPU_Load{flow=~\"$flow\"})",
-          "legendFormat": "{{flow}}",
+          "expr": "max by (host) (flink_taskmanager_Status_JVM_CPU_Load)",
+          "legendFormat": "{{host}}",
           "range": true,
           "instant": false
         }
@@ -1243,11 +1267,11 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 30,
+        "y": 31,
         "w": 6,
         "h": 7
       },
-      "id": 20
+      "id": 21
     },
     {
       "type": "timeseries",
@@ -1264,8 +1288,8 @@
             "uid": "PBFA97CFB590B2093"
           },
           "refId": "A",
-          "expr": "max by (flow) (flink_taskmanager_Status_JVM_Memory_Heap_Used{flow=~\"$flow\"} / flink_taskmanager_Status_JVM_Memory_Heap_Max{flow=~\"$flow\"})",
-          "legendFormat": "{{flow}}",
+          "expr": "max by (host) (flink_taskmanager_Status_JVM_Memory_Heap_Used / flink_taskmanager_Status_JVM_Memory_Heap_Max)",
+          "legendFormat": "{{host}}",
           "range": true,
           "instant": false
         }
@@ -1324,11 +1348,11 @@
       },
       "gridPos": {
         "x": 6,
-        "y": 30,
+        "y": 31,
         "w": 6,
         "h": 7
       },
-      "id": 21
+      "id": 22
     },
     {
       "type": "timeseries",
@@ -1345,8 +1369,8 @@
             "uid": "PBFA97CFB590B2093"
           },
           "refId": "A",
-          "expr": "max by (flow) (flink_jobmanager_Status_JVM_Memory_Heap_Used{flow=~\"$flow\"} / flink_jobmanager_Status_JVM_Memory_Heap_Max{flow=~\"$flow\"})",
-          "legendFormat": "{{flow}}",
+          "expr": "max(flink_jobmanager_Status_JVM_Memory_Heap_Used / flink_jobmanager_Status_JVM_Memory_Heap_Max)",
+          "legendFormat": "JobManager",
           "range": true,
           "instant": false
         }
@@ -1405,11 +1429,11 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 30,
+        "y": 31,
         "w": 6,
         "h": 7
       },
-      "id": 22
+      "id": 23
     },
     {
       "type": "timeseries",
@@ -1426,8 +1450,8 @@
             "uid": "PBFA97CFB590B2093"
           },
           "refId": "A",
-          "expr": "max by (flow) (flink_taskmanager_Status_JVM_GarbageCollector_All_TimeMsPerSecond{flow=~\"$flow\"})",
-          "legendFormat": "{{flow}}",
+          "expr": "max by (host) (flink_taskmanager_Status_JVM_GarbageCollector_All_TimeMsPerSecond)",
+          "legendFormat": "{{host}}",
           "range": true,
           "instant": false
         }
@@ -1479,20 +1503,20 @@
       },
       "gridPos": {
         "x": 18,
-        "y": 30,
+        "y": 31,
         "w": 6,
         "h": 7
       },
-      "id": 23
+      "id": 24
     },
     {
       "type": "row",
-      "title": "Uyarılar",
-      "id": 24,
+      "title": "Uyarılar ve job denetçisi",
+      "id": 25,
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 37,
+        "y": 38,
         "w": 24,
         "h": 1
       },
@@ -1500,8 +1524,8 @@
     },
     {
       "type": "alertlist",
-      "title": "Flink uyarıları (tüm akışlar)",
-      "description": "Flink altyapı uyarıları; her uyarı etkilenen akışı flow etiketiyle gösterir.",
+      "title": "Flink uyarıları",
+      "description": "Flink altyapı uyarıları; job uyarıları etkilenen akışı flow etiketiyle gösterir.",
       "options": {
         "viewMode": "list",
         "groupMode": "default",
@@ -1521,11 +1545,46 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 38,
-        "w": 24,
-        "h": 7
+        "y": 39,
+        "w": 12,
+        "h": 9
       },
-      "id": 25
+      "id": 26
+    },
+    {
+      "type": "logs",
+      "title": "Job denetçisi (flink-job-supervisor)",
+      "description": "Job gönderimleri ve checkpoint'ten geri yüklemeler.",
+      "datasource": {
+        "type": "loki",
+        "uid": "P8E80F9AEF21F6940"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "P8E80F9AEF21F6940"
+          },
+          "refId": "A",
+          "expr": "{container=~\".*flink-job-supervisor.*\"}",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 39,
+        "w": 12,
+        "h": 9
+      },
+      "id": 27
     }
   ]
 }

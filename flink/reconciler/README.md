@@ -1,7 +1,7 @@
 # flink/reconciler
 
 Apache Flink reconciler for the FAST, Havale and EFT transfer flows. One code base and one image;
-each flow runs as its own job in its own Flink cluster (application mode), selected with `FLOW`.
+each flow runs as its own job in one shared Flink session cluster, selected with `FLOW`.
 
 ## Runtime
 
@@ -22,17 +22,17 @@ business rules belong there too when the flows start to differ.
 
 ```powershell
 docker compose build flink-checkpoint-init     # builds flink-reconciler:local once
-docker compose up -d flink-fast-jobmanager flink-fast-taskmanager
+docker compose up -d flink-jobmanager flink-taskmanager flink-job-supervisor
 ```
 
-Flink UI: FAST `http://localhost:18082`, Havale `:18083`, EFT `:18084`.
+Flink UI (all three jobs): `http://localhost:18081`.
 
 Each cluster exposes Prometheus metrics on port `9249`. Prometheus adds `flow` from the service
 name and normalizes the operator metrics to `reconciler_*` (see `observability/prometheus.yml`).
 
 ## Configuration
 
-Set on the JobManager service (the job's `main` runs there in application mode):
+Set on the `flink-job-supervisor` service, which submits each job with `FLOW` and these settings:
 
 | Variable | Default | Description |
 |---|---|---|
@@ -50,11 +50,12 @@ Durations accept `500ms`, `30s`, `10m`, `1h` or plain milliseconds; an invalid v
 
 ## Restart from checkpoint
 
-The JobManager entrypoint [docker/start-job.sh](docker/start-job.sh) starts the job from the flow's newest
-completed checkpoint (`/opt/flink/checkpoints/<flow>/<job-id>/chk-N`, NO_CLAIM mode) and deletes the
-checkpoint directories of older runs. Without it, a restarted JobManager (no HA) would start the job
-with empty state. Set `RESTORE_FROM_CHECKPOINT=false` to start with empty state, e.g. after an
-incompatible state change.
+The supervisor [docker/supervise-jobs.sh](docker/supervise-jobs.sh) checks every 30 s that the job of each
+flow is running. If it is missing (after a JobManager restart, which loses all jobs without HA), it submits
+it again from the flow's newest completed checkpoint (`/opt/flink/checkpoints/<flow>/<job-id>/chk-N`,
+NO_CLAIM) and deletes the checkpoint directories of older runs. A job cancelled from the UI stays stopped;
+start it again with `docker compose exec flink-job-supervisor /opt/flink/docker/supervise-jobs.sh start <flow>`.
+`RESTORE_FROM_CHECKPOINT=false` submits with empty state, e.g. after an incompatible state change.
 
 ## Tests
 

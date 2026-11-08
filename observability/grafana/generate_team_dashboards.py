@@ -491,11 +491,13 @@ def developer(flow, meta):
 
     b.row("Loglar")
     # "Name collision" WARNs (KafkaSink registers pendingCommittables twice) are harmless: filtered out.
-    flink_logs = f'{{container=~".*flink-{flow}-.*"}} |~ "(?i)(error|exception|warn)" !~ "Name collision"'
+    flink_logs = f'{FLINK_CONTAINERS} {flow_log_filter(flow)} |~ "(?i)(error|exception|warn)" !~ "Name collision"'
     app_logs = f'{{container=~".*mock-(producer|consumer).*"}} |~ "(?i){flow}" |~ "(?i)(error|warn|fail)"'
     b.add(log_volume("Hata / uyarı log sayısı",
                      f'sum by (container) (count_over_time({flink_logs} [1m]))'), 24, 6)
-    b.add(logs(f"Flink ({flow}) hata ve uyarıları", flink_logs), 12, 10)
+    b.add(logs(f"Flink ({flow}) hata ve uyarıları", flink_logs,
+               "Paylaşılan Flink container'larının bu akışın job adını içeren satırları. "
+               "Cluster genelindeki hatalar Platform · Flink panosundadır."), 12, 10)
     b.add(logs(f"API / consumer logları ({flow})", app_logs), 12, 10)
     return b
 
@@ -506,24 +508,27 @@ def sre(flow, meta):
     b = Board(f"{flow}-sre", f"{name} · SRE", [flow, "transfer-team", "sre"],
               f"{name} servis sağlığı: erişilebilirlik, SLO'lar, checkpoint, backpressure, lag, kaynaklar ve uyarılar.")
     b.add(text(f"### {name} · SRE panosu\n"
-               f"{name} kendi Flink cluster'ında çalışır: `flink-{flow}-jobmanager` (UI) ve `flink-{flow}-taskmanager`. "
+               f"{name}, paylaşılan Flink cluster'ında ayrı bir job olarak çalışır (`flink-{flow}-reconciler`, UI: http://localhost:18081). "
+               "JobManager ve TaskManager'lar akışlar arasında ortaktır: **Durum** satırının cluster göstergeleri ve **Kaynaklar** bölümü tüm akışlar için aynıdır. "
                "**SLO'lar:** isteklerin %99,9'u bir sonuca ulaşır, transferlerin %99'u 5 s içinde tamamlanır, API 5xx oranı < %0,1. "
                "İş kaynaklı başarısızlıklar (ör. yetersiz bakiye) SLO ihlali değildir; bilgi amaçlı ayrıca gösterilir."), 24, 3)
 
     f = sel(flow=flow)
-    jm = sel(job="flink-jobmanager", flow=flow)
-    tmj = sel(job="flink-reconcilers", flow=flow)
     up_th = thresholds(("red", None), ("green", 1))
     b.row("Durum")
-    b.add(stat("JobManager", [(f"min(up{jm})", "")], "short", "Prometheus'un JobManager'a ulaşabilmesi.",
-               up_th, graph=False), 3, 4)
-    b.add(stat("TaskManager", [(f"min(up{tmj})", "")], "short", th=up_th, graph=False), 3, 4)
-    b.add(stat("Çalışan job", [(f"max(flink_jobmanager_numRunningJobs{f})", "")], "short", th=up_th, graph=False), 3, 4)
+    b.add(stat("JobManager (ortak)", [('min(up{job="flink-jobmanager"}) or vector(0)', "")], "short",
+               "Paylaşılan cluster'ın JobManager'ı (UI, job yönetimi).", up_th, graph=False), 3, 4)
+    b.add(stat("TaskManager (ortak)", [("max(flink_jobmanager_numRegisteredTaskManagers) or vector(0)", "")], "short",
+               "Kayıtlı TaskManager sayısı (beklenen 3). 2 ile job'lar çalışır ama bir kayıp daha karşılanamaz.",
+               TM_UP_TH, graph=False), 3, 4)
+    b.add(stat("Job çalışıyor", [(f"count(flink_jobmanager_job_uptime{f} > 0) or vector(0)", "")], "short",
+               f"`flink-{flow}-reconciler` job'u RUNNING mi? 0 ise flink-job-supervisor 30 s içinde checkpoint'ten yeniden başlatır "
+               "(arayüzden iptal edildiyse başlatmaz).", up_th, graph=False), 3, 4)
     b.add(stat("Job uptime", [(f"max(flink_jobmanager_job_uptime{f}) / 1000", "")], "s", graph=False), 3, 4)
     b.add(stat("Restart", [(f"max(increase(flink_jobmanager_job_numRestarts{f}[$__range]))", "")], "short",
                th=thresholds(("green", None), ("yellow", 1), ("red", 3)), decimals=0, graph=False), 3, 4)
-    b.add(stat("Boş slot", [(f"max(flink_jobmanager_taskSlotsAvailable{f})", "")], "short",
-               "Boş slot kalmazsa bir TaskManager kaybında job yeniden ayağa kalkamaz.",
+    b.add(stat("Boş slot (ortak)", [("max(flink_jobmanager_taskSlotsAvailable)", "")], "short",
+               "Cluster genelinde boş slot. Normalde 6 (15 slot, 3 job x 3).",
                thresholds(("red", None), ("green", 1)), graph=False), 3, 4)
     b.add(stat("Toplam lag", [(f"sum(kafka_consumergroup_lag{sel(consumergroup=q.group)})", "")], "short",
                th=thresholds(("green", None), ("yellow", 1000), ("red", 10000))), 3, 4)
@@ -584,24 +589,26 @@ def sre(flow, meta):
         (f"max(increase(flink_jobmanager_job_numRestarts{f}[5m]))", "restart (5 dk)"),
     ], "short", "Job başlangıcındaki ilk checkpoint, task'lar hazır olmadığından başarısız olabilir."), 8, 7)
 
-    b.row("Kaynaklar")
+    b.row("Kaynaklar (paylaşılan cluster)")
     b.add(timeseries("CPU", [
-        (f"max by (host) (flink_taskmanager_Status_JVM_CPU_Load{f})", "TaskManager {{host}}"),
-        (f"max(flink_jobmanager_Status_JVM_CPU_Load{f})", "JobManager"),
-    ], "percentunit", th=thresholds(("green", None), ("red", 0.85))), 8, 7)
+        ("max by (host) (flink_taskmanager_Status_JVM_CPU_Load)", "TaskManager {{host}}"),
+        ("max(flink_jobmanager_Status_JVM_CPU_Load)", "JobManager"),
+    ], "percentunit", "Tüm akışların ortak kullandığı JobManager ve TaskManager'lar.",
+        th=thresholds(("green", None), ("red", 0.85))), 8, 7)
     b.add(timeseries("Heap kullanımı", [
-        (f"max by (host) (flink_taskmanager_Status_JVM_Memory_Heap_Used{f} / flink_taskmanager_Status_JVM_Memory_Heap_Max{f})", "TaskManager {{host}}"),
-        (f"max(flink_jobmanager_Status_JVM_Memory_Heap_Used{f} / flink_jobmanager_Status_JVM_Memory_Heap_Max{f})", "JobManager"),
+        ("max by (host) (flink_taskmanager_Status_JVM_Memory_Heap_Used / flink_taskmanager_Status_JVM_Memory_Heap_Max)", "TaskManager {{host}}"),
+        ("max(flink_jobmanager_Status_JVM_Memory_Heap_Used / flink_jobmanager_Status_JVM_Memory_Heap_Max)", "JobManager"),
     ], "percentunit", th=thresholds(("green", None), ("red", 0.85))), 8, 7)
     b.add(timeseries("GC süresi (ms/s)", [
-        (f"max by (host) (flink_taskmanager_Status_JVM_GarbageCollector_All_TimeMsPerSecond{f})", "TaskManager {{host}}"),
+        ("max by (host) (flink_taskmanager_Status_JVM_GarbageCollector_All_TimeMsPerSecond)", "TaskManager {{host}}"),
     ], "ms"), 8, 7)
 
     b.row("Uyarılar ve loglar")
     b.add(alerts(f"{name} uyarıları (iş + Flink)", f'{{flow="{flow}"}}',
                  "Bu akışa ait tüm firing / pending uyarılar."), 10, 9)
     b.add(log_volume("Hata / uyarı log sayısı",
-                     f'sum by (container) (count_over_time({{container=~".*flink-{flow}-.*"}} |~ "(?i)(error|exception)" [1m]))'), 14, 9)
+                     f'sum by (container) (count_over_time({FLINK_CONTAINERS} {flow_log_filter(flow)} |~ "(?i)(error|exception)" [1m]))',
+                     "Paylaşılan Flink container'larının bu akışın job adını içeren hata satırları."), 14, 9)
     return b
 
 
@@ -613,6 +620,15 @@ BUILDERS = {"business": business, "developer": developer, "sre": sre}
 # --------------------------------------------------------------------------------------------
 FLOW_FROM_ENDPOINT = '"flow", "$1", "endpoint", "/events/([^/]+)/.*"'
 MOCK_GROUPS = "fast_incoming|fast_outgoing|havale|eft_incoming|eft_outgoing"
+
+
+FLINK_CONTAINERS = '{container=~".*flink-(jobmanager|taskmanager|job-supervisor).*"}'
+TM_UP_TH = thresholds(("red", None), ("yellow", 1), ("green", 3))
+
+
+def flow_log_filter(flow):
+    """Lines of the shared Flink containers that name this flow's job (or the supervisor's flow=)."""
+    return f'|~ "flink[-_]{flow}[-_]reconciler|flow={flow}"'
 
 
 def flow_var():
@@ -692,24 +708,28 @@ def platform_services():
 
 def flink_platform():
     b = Board("flink-platform", "Platform · Flink (tüm akışlar)", ["platform"],
-              "FAST, Havale ve EFT Flink cluster'larının yan yana sağlık görünümü.")
+              "Paylaşılan Flink cluster'ı ve içindeki FAST, Havale, EFT job'ları.")
     b.variables.append(flow_var())
     b.add(text("### Platform · Flink\n"
-               "Her akış kendi Flink cluster'ında çalışır (application mode): `flink-<akış>-jobmanager` + `flink-<akış>-taskmanager`. "
-               "Bu pano üç cluster'ı yan yana gösterir; bir akışın ayrıntısı için o akışın **SRE** panosuna geçin "
-               "(UI: FAST `:18082`, Havale `:18083`, EFT `:18084`)."), 24, 3)
+               "Tek bir Flink session cluster'ı (1 JobManager, 3 TaskManager x 5 slot) üç ayrı job çalıştırır: "
+               "`flink-fast-reconciler`, `flink-havale-reconciler`, `flink-eft-reconciler`. Yönetim arayüzü: http://localhost:18081. "
+               "`flink-job-supervisor` job'ları çalışır tutar. Bir akışın ayrıntısı için o akışın **SRE** panosuna geçin."), 24, 3)
     f = '{flow=~"$flow"}'
-    jm = '{job="flink-jobmanager", flow=~"$flow"}'
-    tm = '{job="flink-reconcilers", flow=~"$flow"}'
     up_th = thresholds(("red", None), ("green", 1))
 
-    b.row("Cluster durumu (akış başına)")
-    b.add(stat("JobManager", [(f"min by (flow) (up{jm})", "{{flow}}")], "short", th=up_th, graph=False, text_mode="value_and_name"), 6, 4)
-    b.add(stat("TaskManager", [(f"min by (flow) (up{tm})", "{{flow}}")], "short", th=up_th, graph=False, text_mode="value_and_name"), 6, 4)
-    b.add(stat("Çalışan job", [(f"max by (flow) (flink_jobmanager_numRunningJobs{f})", "{{flow}}")], "short", th=up_th, graph=False, text_mode="value_and_name"), 6, 4)
-    b.add(stat("Boş slot", [(f"max by (flow) (flink_jobmanager_taskSlotsAvailable{f})", "{{flow}}")], "short",
-               "0 ise bir TaskManager kaybında job yeniden ayağa kalkamaz.", thresholds(("red", None), ("green", 1)),
-               graph=False, text_mode="value_and_name"), 6, 4)
+    b.row("Cluster")
+    b.add(stat("JobManager", [('min(up{job="flink-jobmanager"}) or vector(0)', "")], "short",
+               "UI ve job yönetimi; düşerse tüm job'lar durur, flink-job-supervisor geri gelince yeniden başlatır.",
+               up_th, graph=False), 4, 4)
+    b.add(stat("TaskManager", [("max(flink_jobmanager_numRegisteredTaskManagers) or vector(0)", "")], "short",
+               "Kayıtlı TaskManager (beklenen 3). 2 ile job'lar çalışır ama bir kayıp daha karşılanamaz.",
+               TM_UP_TH, graph=False), 4, 4)
+    b.add(stat("Slot", [("max(flink_jobmanager_taskSlotsAvailable)", "boş"), ("max(flink_jobmanager_taskSlotsTotal)", "toplam")],
+               "short", "Normalde 6 boş / 15 toplam (3 job x 3 slot).", graph=False, text_mode="value_and_name"), 6, 4)
+    b.add(stat("Job çalışıyor", [(f'count by (flow) (flink_jobmanager_job_uptime{f} > 0)', "{{flow}}")], "short",
+               "Akış başına RUNNING job. Eksik akış: job çalışmıyor.", up_th, graph=False, text_mode="value_and_name"), 10, 4)
+
+    b.row("Job'lar (akış başına)")
     b.add(stat("Job uptime", [(f"max by (flow) (flink_jobmanager_job_uptime{f}) / 1000", "{{flow}}")], "s", graph=False, text_mode="value_and_name"), 6, 4)
     b.add(stat("Restart (aralıkta)", [(f"max by (flow) (increase(flink_jobmanager_job_numRestarts{f}[$__range]))", "{{flow}}")], "short",
                th=thresholds(("green", None), ("yellow", 1), ("red", 3)), decimals=0, graph=False, text_mode="value_and_name"), 6, 4)
@@ -740,23 +760,25 @@ def flink_platform():
         (f"max by (flow) (increase(flink_jobmanager_job_numberOfFailedCheckpoints{f}[5m]))", "{{flow}}"),
     ], "short", "Job başlangıcındaki ilk checkpoint, task'lar hazır olmadığından başarısız olabilir."), 8, 7)
 
-    b.row("Kaynaklar")
+    b.row("Kaynaklar (TaskManager başına)")
     b.add(timeseries("TaskManager CPU", [
-        (f"max by (flow) (flink_taskmanager_Status_JVM_CPU_Load{f})", "{{flow}}"),
+        ("max by (host) (flink_taskmanager_Status_JVM_CPU_Load)", "{{host}}"),
     ], "percentunit", th=thresholds(("green", None), ("red", 0.85))), 6, 7)
     b.add(timeseries("TaskManager heap", [
-        (f"max by (flow) (flink_taskmanager_Status_JVM_Memory_Heap_Used{f} / flink_taskmanager_Status_JVM_Memory_Heap_Max{f})", "{{flow}}"),
+        ("max by (host) (flink_taskmanager_Status_JVM_Memory_Heap_Used / flink_taskmanager_Status_JVM_Memory_Heap_Max)", "{{host}}"),
     ], "percentunit", th=thresholds(("green", None), ("red", 0.85))), 6, 7)
     b.add(timeseries("JobManager heap", [
-        (f"max by (flow) (flink_jobmanager_Status_JVM_Memory_Heap_Used{f} / flink_jobmanager_Status_JVM_Memory_Heap_Max{f})", "{{flow}}"),
+        ("max(flink_jobmanager_Status_JVM_Memory_Heap_Used / flink_jobmanager_Status_JVM_Memory_Heap_Max)", "JobManager"),
     ], "percentunit", th=thresholds(("green", None), ("red", 0.85))), 6, 7)
     b.add(timeseries("GC süresi (ms/s)", [
-        (f"max by (flow) (flink_taskmanager_Status_JVM_GarbageCollector_All_TimeMsPerSecond{f})", "{{flow}}"),
+        ("max by (host) (flink_taskmanager_Status_JVM_GarbageCollector_All_TimeMsPerSecond)", "{{host}}"),
     ], "ms"), 6, 7)
 
-    b.row("Uyarılar")
-    b.add(alerts("Flink uyarıları (tüm akışlar)", '{domain="flink"}',
-                 "Flink altyapı uyarıları; her uyarı etkilenen akışı flow etiketiyle gösterir."), 24, 7)
+    b.row("Uyarılar ve job denetçisi")
+    b.add(alerts("Flink uyarıları", '{domain="flink"}',
+                 "Flink altyapı uyarıları; job uyarıları etkilenen akışı flow etiketiyle gösterir."), 12, 9)
+    b.add(logs("Job denetçisi (flink-job-supervisor)", '{container=~".*flink-job-supervisor.*"}',
+               "Job gönderimleri ve checkpoint'ten geri yüklemeler."), 12, 9)
     return b
 
 

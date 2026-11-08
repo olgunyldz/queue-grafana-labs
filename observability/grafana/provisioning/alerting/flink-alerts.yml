@@ -1,28 +1,30 @@
 # Flink infrastructure alerts managed by Grafana Unified Alerting.
 #
-# These rules are intentionally product-independent. Every flow (fast | havale | eft) runs
-# in its own Flink cluster; Prometheus adds a "flow" label per cluster and the rules
-# keep it, so each alert instance names the affected flow.
+# All flows (fast | havale | eft) run as separate jobs in one Flink session cluster. Cluster rules
+# (JobManager, TaskManagers, slots, TaskManager CPU / heap) have no flow; job rules (running,
+# restarts, checkpoints, backpressure) carry the flow label that Prometheus derives from the job name.
 #
-# | Alert                              | Condition                         | Severity | For |
-# |------------------------------------|-----------------------------------|----------|-----|
-# | Flink JobManager down              | scrape is 0                       | critical | 2m  |
-# | Flink TaskManager metrics down     | scrape is 0                       | critical | 2m  |
-# | No Flink jobs running              | running job count < 1             | critical | 2m  |
-# | No registered TaskManagers         | registered TaskManagers < 1       | critical | 2m  |
-# | No available task slots            | available slots < 1               | warning  | 5m  |
-# | Flink job restart spike             | > 3 restarts in 10m               | warning  | 2m  |
-# | Flink checkpoint failure            | failed checkpoint in 5m, after    | critical | 2m  |
-#                                       | the job's first 6 minutes         |          |     |
-# | Flink checkpoint stale              | last completed checkpoint > 60s   | critical | 2m  |
-# | Flink checkpoint duration high      | last checkpoint > 30s             | warning  | 5m  |
-# | Flink TaskManager CPU high          | JVM CPU load > 85%                | warning  | 10m |
-# | Flink TaskManager heap high         | JVM heap usage > 85%              | warning  | 10m |
-# | Flink operator backpressure high    | backpressure > 60%               | warning  | 5m  |
-# | Flink Kafka consumer lag high       | lag > 10,000 messages             | warning  | 10m |
+# | Alert                              | Condition                              | Severity | For |
+# |------------------------------------|----------------------------------------|----------|-----|
+# | Flink JobManager down              | scrape is 0 / target gone              | critical | 2m  |
+# | No registered Flink TaskManagers   | registered TaskManagers < 1            | critical | 2m  |
+# | Flink TaskManager lost             | registered TaskManagers < 3            | warning  | 2m  |
+# | No available Flink task slots      | available slots < 1                    | warning  | 5m  |
+# | Flink job not running              | per flow: no running job               | critical | 2m  |
+# | Flink job restart spike            | > 3 restarts in 10m                    | warning  | 2m  |
+# | Flink checkpoint failure           | failed checkpoint in 5m, after the     | critical | 2m  |
+#                                      | job's first 6 minutes                  |          |     |
+# | Flink checkpoint stale             | last completed checkpoint > 60s        | critical | 2m  |
+# | Flink checkpoint duration high     | last checkpoint > 30s                  | warning  | 5m  |
+# | Flink TaskManager CPU high         | JVM CPU load > 85%                     | warning  | 10m |
+# | Flink TaskManager heap high        | JVM heap usage > 85%                   | warning  | 10m |
+# | Flink operator backpressure high   | backpressured > 60% of the time        | warning  | 5m  |
+# | Flink Kafka consumer lag high      | lag > 10,000 messages                  | warning  | 10m |
 #
-# The availability rules add a 0 fallback per expected flow, so a cluster that disappeared
-# completely (no scrape target, no series) still alerts. Add a flow there when adding a cluster.
+# "Flink TaskManager lost": 3 TaskManagers x 5 slots run 3 jobs x 3 slots; after losing one the jobs
+# still fit (10 >= 9), but a second loss would not. Keep 3 in line with deploy.replicas in compose.
+# "Flink job not running" adds a 0 fallback per flow, so it also fires when the job is gone
+# completely (e.g. cancelled from the UI). Add a flow there when adding one.
 #
 # Prometheus remains the metrics source, but Grafana owns evaluation, state,
 # notifications, silences and alert instances. The datasource UID below must
@@ -41,7 +43,7 @@ groups:
           - refId: A
             relativeTimeRange: { from: 300, to: 0 }
             datasourceUid: PBFA97CFB590B2093
-            model: { refId: A, expr: 'min by (flow) (up{job="flink-jobmanager"}) or label_replace(vector(0), "flow", "fast", "", "") or label_replace(vector(0), "flow", "havale", "", "") or label_replace(vector(0), "flow", "eft", "", "")', instant: true, range: false, intervalMs: 1000, maxDataPoints: 43200 }
+            model: { refId: A, expr: 'min(up{job="flink-jobmanager"}) or vector(0)', instant: true, range: false, intervalMs: 1000, maxDataPoints: 43200 }
           - refId: C
             datasourceUid: __expr__
             model: { refId: C, type: threshold, expression: A, conditions: [{ evaluator: { type: lt, params: [1] } }] }
@@ -50,48 +52,8 @@ groups:
         execErrState: Error
         labels: { severity: critical, domain: flink }
         annotations:
-          summary: "Flink JobManager is unavailable (flow {{ $labels.flow }})"
-          description: No healthy JobManager scrape target is available.
-        isPaused: false
-
-      - uid: flink-taskmanager-down
-        title: Flink TaskManager metrics down
-        condition: C
-        data:
-          - refId: A
-            relativeTimeRange: { from: 300, to: 0 }
-            datasourceUid: PBFA97CFB590B2093
-            model: { refId: A, expr: 'min by (flow) (up{job="flink-reconcilers"}) or label_replace(vector(0), "flow", "fast", "", "") or label_replace(vector(0), "flow", "havale", "", "") or label_replace(vector(0), "flow", "eft", "", "")', instant: true, range: false, intervalMs: 1000, maxDataPoints: 43200 }
-          - refId: C
-            datasourceUid: __expr__
-            model: { refId: C, type: threshold, expression: A, conditions: [{ evaluator: { type: lt, params: [1] } }] }
-        for: 2m
-        noDataState: Alerting
-        execErrState: Error
-        labels: { severity: critical, domain: flink }
-        annotations:
-          summary: "Flink TaskManager metrics are unavailable (flow {{ $labels.flow }})"
-          description: No TaskManager metrics have been scraped for 2 minutes.
-        isPaused: false
-
-      - uid: flink-no-running-jobs
-        title: No Flink jobs running
-        condition: C
-        data:
-          - refId: A
-            relativeTimeRange: { from: 300, to: 0 }
-            datasourceUid: PBFA97CFB590B2093
-            model: { refId: A, expr: 'max by (flow) (flink_jobmanager_numRunningJobs) or label_replace(vector(0), "flow", "fast", "", "") or label_replace(vector(0), "flow", "havale", "", "") or label_replace(vector(0), "flow", "eft", "", "")', instant: true, range: false, intervalMs: 1000, maxDataPoints: 43200 }
-          - refId: C
-            datasourceUid: __expr__
-            model: { refId: C, type: threshold, expression: A, conditions: [{ evaluator: { type: lt, params: [1] } }] }
-        for: 2m
-        noDataState: Alerting
-        execErrState: Error
-        labels: { severity: critical, domain: flink }
-        annotations:
-          summary: "No Flink jobs are running (flow {{ $labels.flow }})"
-          description: Flink reports no running job.
+          summary: "Flink JobManager is unavailable"
+          description: "The JobManager (UI, job scheduling) has not been scraped for 2 minutes. All reconciler jobs stop with it; flink-job-supervisor resubmits them from their checkpoints once it is back."
         isPaused: false
 
       - uid: flink-no-taskmanagers
@@ -101,7 +63,7 @@ groups:
           - refId: A
             relativeTimeRange: { from: 300, to: 0 }
             datasourceUid: PBFA97CFB590B2093
-            model: { refId: A, expr: 'max by (flow) (flink_jobmanager_numRegisteredTaskManagers) or label_replace(vector(0), "flow", "fast", "", "") or label_replace(vector(0), "flow", "havale", "", "") or label_replace(vector(0), "flow", "eft", "", "")', instant: true, range: false, intervalMs: 1000, maxDataPoints: 43200 }
+            model: { refId: A, expr: 'max(flink_jobmanager_numRegisteredTaskManagers) or vector(0)', instant: true, range: false, intervalMs: 1000, maxDataPoints: 43200 }
           - refId: C
             datasourceUid: __expr__
             model: { refId: C, type: threshold, expression: A, conditions: [{ evaluator: { type: lt, params: [1] } }] }
@@ -110,8 +72,28 @@ groups:
         execErrState: Error
         labels: { severity: critical, domain: flink }
         annotations:
-          summary: "No registered Flink TaskManagers (flow {{ $labels.flow }})"
-          description: The Flink cluster has no registered TaskManager.
+          summary: "No registered Flink TaskManagers"
+          description: "The Flink cluster has no registered TaskManager; no job can run."
+        isPaused: false
+
+      - uid: flink-taskmanager-lost
+        title: Flink TaskManager lost
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: PBFA97CFB590B2093
+            model: { refId: A, expr: 'max(flink_jobmanager_numRegisteredTaskManagers)', instant: true, range: false, intervalMs: 1000, maxDataPoints: 43200 }
+          - refId: C
+            datasourceUid: __expr__
+            model: { refId: C, type: threshold, expression: A, conditions: [{ evaluator: { type: lt, params: [3] } }] }
+        for: 2m
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, domain: flink }
+        annotations:
+          summary: "Flink TaskManager lost{{ if $values.A }}: {{ printf \"%.0f\" $values.A.Value }} of 3 registered{{ end }}"
+          description: "The jobs still fit on the remaining TaskManagers, but losing another one would stop a job. Check docker compose ps flink-taskmanager."
         isPaused: false
 
       - uid: flink-no-available-slots
@@ -121,7 +103,7 @@ groups:
           - refId: A
             relativeTimeRange: { from: 600, to: 0 }
             datasourceUid: PBFA97CFB590B2093
-            model: { refId: A, expr: 'max by (flow) (flink_jobmanager_numAvailableTaskSlots)', instant: true, range: false, intervalMs: 1000, maxDataPoints: 43200 }
+            model: { refId: A, expr: 'max(flink_jobmanager_taskSlotsAvailable)', instant: true, range: false, intervalMs: 1000, maxDataPoints: 43200 }
           - refId: C
             datasourceUid: __expr__
             model: { refId: C, type: threshold, expression: A, conditions: [{ evaluator: { type: lt, params: [1] } }] }
@@ -130,8 +112,28 @@ groups:
         execErrState: Error
         labels: { severity: warning, domain: flink }
         annotations:
-          summary: "No available Flink task slots (flow {{ $labels.flow }})"
-          description: No task slot has been available for 5 minutes.
+          summary: "No available Flink task slots"
+          description: "No task slot has been free for 5 minutes; a failed task cannot be rescheduled."
+        isPaused: false
+
+      - uid: flink-job-not-running
+        title: Flink job not running
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: PBFA97CFB590B2093
+            model: { refId: A, expr: 'count by (flow) (flink_jobmanager_job_uptime > 0) or label_replace(vector(0), "flow", "fast", "", "") or label_replace(vector(0), "flow", "havale", "", "") or label_replace(vector(0), "flow", "eft", "", "")', instant: true, range: false, intervalMs: 1000, maxDataPoints: 43200 }
+          - refId: C
+            datasourceUid: __expr__
+            model: { refId: C, type: threshold, expression: A, conditions: [{ evaluator: { type: lt, params: [1] } }] }
+        for: 2m
+        noDataState: Alerting
+        execErrState: Error
+        labels: { severity: critical, domain: flink }
+        annotations:
+          summary: "Flink job not running (flow {{ $labels.flow }})"
+          description: "No running reconciler job for this flow: its transfers are not matched. If it was cancelled on purpose, start it again with: docker compose exec flink-job-supervisor /opt/flink/docker/supervise-jobs.sh start {{ $labels.flow }}"
         isPaused: false
 
       - uid: flink-restart-spike
@@ -150,7 +152,7 @@ groups:
         execErrState: Error
         labels: { severity: warning, domain: flink }
         annotations:
-          summary: "Flink job restart spike for {{ $labels.job_name }}"
+          summary: "Flink job restart spike (flow {{ $labels.flow }})"
           description: The job restarted more than 3 times in 10 minutes.
         isPaused: false
 
@@ -236,7 +238,7 @@ groups:
         execErrState: Error
         labels: { severity: warning, domain: flink }
         annotations:
-          summary: "Flink TaskManager CPU is high (flow {{ $labels.flow }})"
+          summary: "Flink TaskManager CPU is high ({{ $labels.host }})"
           description: TaskManager CPU load is above 85 percent.
         isPaused: false
 
@@ -256,7 +258,7 @@ groups:
         execErrState: Error
         labels: { severity: warning, domain: flink }
         annotations:
-          summary: "Flink TaskManager heap usage is high (flow {{ $labels.flow }})"
+          summary: "Flink TaskManager heap usage is high ({{ $labels.host }})"
           description: TaskManager heap usage is above 85 percent.
         isPaused: false
 
@@ -267,7 +269,7 @@ groups:
           - refId: A
             relativeTimeRange: { from: 900, to: 0 }
             datasourceUid: PBFA97CFB590B2093
-            model: { refId: A, expr: 'flink_taskmanager_job_task_operator_backPressuredTimeMsPerSecond / 1000', instant: true, range: false, intervalMs: 1000, maxDataPoints: 43200 }
+            model: { refId: A, expr: 'max by (flow, task_name) (flink_taskmanager_job_task_backPressuredTimeMsPerSecond) / 1000', instant: true, range: false, intervalMs: 1000, maxDataPoints: 43200 }
           - refId: C
             datasourceUid: __expr__
             model: { refId: C, type: threshold, expression: A, conditions: [{ evaluator: { type: gt, params: [0.6] } }] }
@@ -276,7 +278,7 @@ groups:
         execErrState: Error
         labels: { severity: warning, domain: flink }
         annotations:
-          summary: "Flink operator backpressure is high (flow {{ $labels.flow }})"
+          summary: "Flink backpressure is high (flow {{ $labels.flow }}, {{ $labels.task_name }})"
           description: An operator is backpressured above 60 percent.
         isPaused: false
 
@@ -299,3 +301,10 @@ groups:
           summary: "Kafka lag is high for {{ $labels.consumergroup }}"
           description: "Consumer group {{ $labels.consumergroup }} has more than 10000 pending messages on {{ $labels.topic }}."
         isPaused: false
+
+# Rules of the previous one-cluster-per-flow setup, replaced above.
+deleteRules:
+  - orgId: 1
+    uid: flink-taskmanager-down
+  - orgId: 1
+    uid: flink-no-running-jobs
