@@ -1,6 +1,5 @@
 package fast.reconciler.flink;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.time.Instant;
@@ -22,7 +21,7 @@ import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.util.Collector;
 
 /**
- * Flink equivalent of the Kafka Streams ReconcilerProcessor.
+ * Matches the request and outcome events of one flow by transaction_id (keyed state).
  *
  * <p>Timers are processing-time and start when an entry is first stored, not from the Kafka record
  * timestamp. Otherwise, while a backlog is being consumed, an old request would expire immediately,
@@ -97,25 +96,12 @@ final class FlinkReconciliationFunction extends KeyedProcessFunction<String, Inp
 
     @Override
     public void processElement(InputEvent input, Context context, Collector<OutputRecord> out) throws Exception {
-        JsonNode event;
-        try {
-            event = JSON.readTree(input.value);
-        } catch (Exception ignored) {
-            metrics.invalid();
-            return;
-        }
-
-        String transactionId = text(event, "transaction_id");
-        String eventName = text(event, "event");
-        if (transactionId == null || eventName == null) {
-            metrics.invalid();
-            return;
-        }
-
+        // Parsed and validated in KafkaInputEventDeserializer (transaction_id and event are present).
+        String transactionId = input.transactionId;
+        String eventName = input.event;
         long timestamp = input.timestamp > 0
                 ? input.timestamp
                 : context.timerService().currentProcessingTime();
-        JsonNode payload = event.path("payload");
         PendingState current = state.value();
         if (current == null) {
             current = new PendingState();
@@ -128,13 +114,13 @@ final class FlinkReconciliationFunction extends KeyedProcessFunction<String, Inp
 
         if (sendEvents.contains(eventName)) {
             if (current.outcome != null) {
-                emitMatched(transactionId, sendSide(payload, timestamp, eventName), current.outcome, out);
+                emitMatched(transactionId, sendSide(input, timestamp), current.outcome, out);
                 complete(current, context);
                 metrics.matchedFromOutcome();
             } else if (current.send != null) {
                 metrics.duplicate(eventName);
             } else {
-                current.send = sendSide(payload, timestamp, eventName);
+                current.send = sendSide(input, timestamp);
                 registerTimers(current, context);
                 state.update(current);
                 metrics.sendStored();
@@ -145,10 +131,10 @@ final class FlinkReconciliationFunction extends KeyedProcessFunction<String, Inp
         SideState outcome = new SideState(
                 eventName,
                 timestamp,
-                payload.path("amount").asDouble(),
-                text(payload, "failure_reason"),
-                BankResolver.code(text(payload, "sender_bank"), text(payload, "sender_iban")),
-                BankResolver.code(text(payload, "receiver_bank"), text(payload, "receiver_iban")));
+                input.amount,
+                input.failureReason,
+                BankResolver.code(input.senderBank, input.senderIban),
+                BankResolver.code(input.receiverBank, input.receiverIban));
 
         if (current.send != null) {
             emitMatched(transactionId, current.send, outcome, out);
@@ -278,32 +264,19 @@ final class FlinkReconciliationFunction extends KeyedProcessFunction<String, Inp
                 .collect(Collectors.toUnmodifiableSet());
     }
 
-    private static SideState sendSide(JsonNode payload, long timestamp, String eventName) {
+    private static SideState sendSide(InputEvent input, long timestamp) {
         return new SideState(
-                eventName,
+                input.event,
                 timestamp,
-                payload.path("amount").asDouble(),
+                input.amount,
                 null,
-                BankResolver.code(text(payload, "sender_bank"), text(payload, "sender_iban")),
-                BankResolver.code(text(payload, "receiver_bank"), text(payload, "receiver_iban")));
+                BankResolver.code(input.senderBank, input.senderIban),
+                BankResolver.code(input.receiverBank, input.receiverIban));
     }
 
     /** Visible for tests. */
     FlinkReconciliationMetrics metrics() {
         return metrics;
-    }
-
-    static String transactionId(InputEvent input) {
-        try {
-            return text(JSON.readTree(input.value), "transaction_id");
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
-    private static String text(JsonNode node, String field) {
-        JsonNode value = node.get(field);
-        return value == null || value.isNull() || value.asText().isBlank() ? null : value.asText();
     }
 
     private static String firstNonNull(String first, String second) {

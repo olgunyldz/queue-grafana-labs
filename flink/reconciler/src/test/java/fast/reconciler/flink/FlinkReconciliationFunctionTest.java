@@ -27,7 +27,7 @@ class FlinkReconciliationFunctionTest {
                 "fast_transfer_matched", "fast_transfer_unmatched", 30_000, 600_000, 10_000, 1);
         harness = new KeyedOneInputStreamOperatorTestHarness<>(
                 new KeyedProcessOperator<>(new FlinkReconciliationFunction(config)),
-                FlinkReconciliationFunction::transactionId,
+                InputEvent::key,
                 BasicTypeInfo.STRING_TYPE_INFO,
                 1,
                 1,
@@ -142,7 +142,7 @@ class FlinkReconciliationFunctionTest {
         FlinkReconciliationFunction restored = new FlinkReconciliationFunction(config);
         harness = new KeyedOneInputStreamOperatorTestHarness<>(
                 new KeyedProcessOperator<>(restored),
-                FlinkReconciliationFunction::transactionId,
+                InputEvent::key,
                 BasicTypeInfo.STRING_TYPE_INFO, 1, 1, 0);
         harness.setup();
         harness.initializeState(snapshot);
@@ -159,6 +159,6 @@ class FlinkReconciliationFunctionTest {
         String value = "{\"event\":\"" + name + "\",\"transaction_id\":\"" + transactionId
                 + "\",\"payload\":{\"transaction_id\":\"" + transactionId
                 + "\",\"amount\":" + amount + extra + "}}";
-        return new InputEvent(value, timestamp);
+        return KafkaInputEventDeserializer.parse(value.getBytes(java.nio.charset.StandardCharsets.UTF_8), timestamp);
     }
 }

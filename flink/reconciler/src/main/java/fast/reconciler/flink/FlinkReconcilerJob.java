@@ -36,11 +36,9 @@ public final class FlinkReconcilerJob {
         DataStream<InputEvent> events = environment
                 .fromSource(source(config), WatermarkStrategy.noWatermarks(), config.applicationId() + "-kafka-source")
                 .uid("kafka-source");
+        // Invalid records are already dropped (and counted) by the deserializer.
         DataStream<OutputRecord> outputs = events
-                .filter(input -> FlinkReconciliationFunction.transactionId(input) != null)
-                .uid("has-transaction-id")
-                .name("has-transaction-id")
-                .keyBy(FlinkReconciliationFunction::transactionId)
+                .keyBy(InputEvent::key)
                 .process(new FlinkReconciliationFunction(config))
                 .uid("reconciliation")
                 .name(config.applicationId() + "-reconciliation");

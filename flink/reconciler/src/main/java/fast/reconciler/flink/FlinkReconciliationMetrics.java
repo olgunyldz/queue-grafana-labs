@@ -11,7 +11,7 @@ import org.apache.flink.metrics.MetricGroup;
 /**
  * Reconciler metrics, registered under the "reconciler" group. Prometheus normalizes the Flink names to
  * reconciler_* (see observability/prometheus.yml) and adds the "flow" label per cluster, so FAST,
- * Havale, EFT and the Kafka Streams reconciler share one metric contract.
+ * Havale and EFT share one metric contract.
  */
 final class FlinkReconciliationMetrics {
     private static final double[] COMPLETION_BUCKETS =
@@ -21,7 +21,6 @@ final class FlinkReconciliationMetrics {
 
     private final MetricGroup root;
     private final Set<String> failedEvents;
-    private final Counter invalid;
     private final AtomicLong pending = new AtomicLong();
     private final AtomicLong stuck = new AtomicLong();
     private final AtomicLong orphanOutcomes = new AtomicLong();
@@ -39,7 +38,6 @@ final class FlinkReconciliationMetrics {
         pending.set(initialGauges[0]);
         stuck.set(initialGauges[1]);
         orphanOutcomes.set(initialGauges[2]);
-        invalid = counter("invalid_events_total");
         this.root.gauge("pending", (Gauge<Long>) pending::get);
         this.root.gauge("stuck", (Gauge<Long>) stuck::get);
         this.root.gauge("orphan_outcomes", (Gauge<Long>) orphanOutcomes::get);
@@ -88,10 +86,6 @@ final class FlinkReconciliationMetrics {
 
     void duplicate(String event) {
         counter("duplicates_total", "event", event).inc();
-    }
-
-    void invalid() {
-        invalid.inc();
     }
 
     void sendStored() {

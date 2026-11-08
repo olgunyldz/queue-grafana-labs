@@ -59,7 +59,8 @@ scrape_configs:
     # Map them back to reconciler_<metric>, the contract shared with the Kafka Streams reconciler.
     metric_relabel_configs:
       - source_labels: [__name__]
-        regex: flink_taskmanager_job_task_operator_reconciler_(?:.*_)?(transfers_total|volume_try_total|completion_seconds_bucket|completion_seconds_count|completion_seconds_sum|amount_try_bucket|amount_try_count|amount_try_sum|failures_total|unmatched_total|duplicates_total|invalid_events_total|pending|stuck|orphan_outcomes)
+        # invalid_events_total is registered by the Kafka source's deserializer (extra "deserializer" scope).
+        regex: flink_taskmanager_job_task_operator_(?:deserializer_)?reconciler_(?:.*_)?(transfers_total|volume_try_total|completion_seconds_bucket|completion_seconds_count|completion_seconds_sum|amount_try_bucket|amount_try_count|amount_try_sum|failures_total|unmatched_total|duplicates_total|invalid_events_total|pending|stuck|orphan_outcomes)
         target_label: __name__
         replacement: reconciler_$1
       # Flink sanitizes decimal bucket labels (0.05 -> 0_05, +Inf -> _Inf).
