@@ -40,7 +40,7 @@ public final class Main {
         new ClassLoaderMetrics().bindTo(registry);
         new ProcessorMetrics().bindTo(registry);
 
-        Topology topology = ReconcilerTopology.build(config, new ReconcilerMetrics(registry));
+        Topology topology = ReconcilerTopology.build(config, new ReconcilerMetrics(registry, config));
         LOG.info("topology:\n{}", topology.describe());
 
         KafkaStreams streams = new KafkaStreams(topology, streamsProperties(config));

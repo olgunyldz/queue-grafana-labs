@@ -1,13 +1,18 @@
 package fast.reconciler;
 
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /** Settings from environment variables (same style as the .NET services). */
 record Config(
         String brokers,
         String applicationId,
         List<String> inputTopics,
+        Set<String> sendEvents,
+        Set<String> failedEvents,
         String matchedTopic,
         String unmatchedTopic,
         int partitions,
@@ -23,7 +28,11 @@ record Config(
         return new Config(
                 env("KAFKA_BROKERS", "kafka:9092"),
                 env("APPLICATION_ID", "fast-reconciler"),
-                List.of(env("INPUT_TOPICS", "fast_send,fast_send_success,fast_send_failed").split(",")),
+                List.copyOf(csv(env("INPUT_TOPICS",
+                        "fast_incoming_request,fast_incoming_success,fast_incoming_failed,"
+                                + "fast_outgoing_request,fast_outgoing_success,fast_outgoing_failed"))),
+                csv(env("SEND_EVENTS", "fast_incoming_request,fast_outgoing_request")),
+                csv(env("FAILED_EVENTS", "fast_incoming_failed,fast_outgoing_failed")),
                 env("MATCHED_TOPIC", "fast_transfer_matched"),
                 env("UNMATCHED_TOPIC", "fast_transfer_unmatched"),
                 Integer.parseInt(env("REPARTITION_PARTITIONS", "3")),
@@ -34,6 +43,14 @@ record Config(
                 env("PROCESSING_GUARANTEE", "exactly_once_v2"),
                 env("STATE_DIR", "/var/lib/fast-reconciler"),
                 Integer.parseInt(env("METRICS_PORT", "9400")));
+    }
+
+    /** Comma-separated values, trimmed, empty entries dropped (insertion order kept). */
+    static Set<String> csv(String raw) {
+        return Arrays.stream(raw.split(","))
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
     }
 
     static String env(String key, String fallback) {
