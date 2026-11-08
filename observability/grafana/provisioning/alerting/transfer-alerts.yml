@@ -14,6 +14,7 @@
 # | Transfer failed count high                     | > 500                              | critical | 5m  |
 # | Transfer failed/success ratio high             | > 20%                              | critical | 5m  |
 # | Transfer stuck transfers high                  | > 50 waiting > 30s (reconciler)    | warning  | 5m  |
+# | Transfer saga manual review                    | any transfer needs manual review   | critical | 1m  |
 #
 # Low-volume alerts are only evaluated during business hours (transfer:business_hours == 1);
 # outside those hours the query is empty and the rule stays Normal.
@@ -264,6 +265,26 @@ groups:
             The failed outcomes / successful outcomes ratio is above 20% for the last 5 minutes.{{ if $values.A }} Current value: {{ humanizePercentage $values.A.Value }}.{{ end }}
         isPaused: false
       # ---- Reconciler metrics -------------------------------------------------------------------
+      - uid: transfer-saga-manual-review
+        title: Transfer saga manual review
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 900, to: 0 }
+            datasourceUid: PBFA97CFB590B2093
+            model: { refId: A, expr: 'sum by (flow) (increase(reconciler_saga_manual_review_total{impl="flink"}[10m]))', instant: true, range: false, intervalMs: 1000, maxDataPoints: 43200 }
+          - refId: C
+            datasourceUid: __expr__
+            model: { refId: C, type: threshold, expression: A, conditions: [{ evaluator: { type: gt, params: [0] } }] }
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: critical, domain: transfer }
+        annotations:
+          summary: "Transfer saga needs manual review (flow {{ $labels.flow }})"
+          description: "{{ if $values.A }}{{ printf \"%.0f\" $values.A.Value }} transfer(s){{ else }}A transfer{{ end }} in flow {{ $labels.flow }} could not be completed automatically in the last 10 minutes: the ledger did not answer after several sends, or a blocked amount had no FAST outcome. See the Geliştirici dashboard, Saga section, and the flow's <flow>_transfer_status topic."
+        isPaused: false
+
       - uid: fast-stuck-transfers-high
         title: Transfer stuck transfers high
         condition: C

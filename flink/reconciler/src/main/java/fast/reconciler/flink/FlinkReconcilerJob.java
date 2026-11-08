@@ -24,6 +24,10 @@ import java.util.Properties;
  * checkpoints (CHECKPOINT_DIR, e.g. /opt/flink/checkpoints/fast), consumer group and Kafka
  * transactional ids; they share the JobManager and the TaskManagers.
  *
+ * <p>Two operators read the flow's events: the reconciliation (request + outcome -> matched / unmatched)
+ * and the saga (request -> BLOCK, outcome -> SETTLE / RELEASE, ledger answers -> transfer status). The
+ * saga also reads {@code ledger_results}.
+ *
  * <p>Operators have fixed uids so state can be restored from a savepoint after code changes.
  */
 public final class FlinkReconcilerJob {
@@ -46,15 +50,40 @@ public final class FlinkReconcilerJob {
                 .fromSource(source(config), WatermarkStrategy.noWatermarks(), config.applicationId() + "-kafka-source")
                 .uid("kafka-source");
         // Invalid records are already dropped (and counted) by the deserializer.
-        DataStream<OutputRecord> outputs = events
+        DataStream<OutputRecord> matched = events
                 .keyBy(InputEvent::key)
                 .process(new FlinkReconciliationFunction(config))
                 .uid("reconciliation")
                 .name(config.applicationId() + "-reconciliation");
 
-        outputs.sinkTo(outputSink(config)).uid("kafka-sink").name(config.applicationId() + "-kafka-sink");
+        // The ledger answers for all flows on one topic; this job keeps only its own flow's answers.
+        DataStream<InputEvent> ledgerResults = environment
+                .fromSource(ledgerSource(config), WatermarkStrategy.noWatermarks(), config.applicationId() + "-ledger-source")
+                .uid("ledger-source")
+                .filter(answer -> config.flow().equals(answer.flow))
+                .uid("ledger-own-flow")
+                .name("ledger-own-flow");
+        DataStream<OutputRecord> saga = events
+                .union(ledgerResults)
+                .keyBy(InputEvent::key)
+                .process(new SagaFunction(config, SagaSettings.fromEnvironment()))
+                .uid("saga")
+                .name(config.applicationId() + "-saga");
+
+        matched.union(saga).sinkTo(outputSink(config)).uid("kafka-sink").name(config.applicationId() + "-kafka-sink");
 
         environment.execute(config.applicationId());
+    }
+
+    /** Answers of the ledger to the saga's commands. Own consumer group, so it never shares offsets with the flow. */
+    private static KafkaSource<InputEvent> ledgerSource(FlinkReconcilerConfig config) {
+        return KafkaSource.<InputEvent>builder()
+                .setBootstrapServers(config.kafkaBrokers())
+                .setTopics(SagaFunction.LEDGER_RESULTS_TOPIC)
+                .setGroupId(config.applicationId() + "-ledger")
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
+                .setDeserializer(new KafkaInputEventDeserializer())
+                .build();
     }
 
     private static KafkaSource<InputEvent> source(FlinkReconcilerConfig config) {

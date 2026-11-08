@@ -7,6 +7,8 @@ package fast.reconciler.flink;
  */
 public class InputEvent {
     public String transactionId;
+    /** Set on ledger answers only (the flow whose saga the answer belongs to); null for flow events. */
+    public String flow;
     public String event;
     public double amount;
     public String failureReason;

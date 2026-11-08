@@ -479,6 +479,27 @@ def developer(flow, meta):
         (q.completion_q(0.95, "5m", by="le, outcome"), "{{outcome}}"),
     ], "s"), 12, 8)
 
+    b.row("Saga (bloke → gönderim → sonuç)")
+    b.add(stat("Kesinleşen (son 1 saat)", [(f"sum(increase(reconciler_saga_state_completed_total{{impl=\"flink\", flow=\"{flow}\"}}[$__range]))", "")],
+               "short", "Bloke edilip gönderilen ve kesinleştirilen transferler (SETTLED).", graph=False, decimals=0), 6, 4)
+    b.add(stat("Serbest bırakılan", [(f"sum(increase(reconciler_saga_state_failed_total{{impl=\"flink\", flow=\"{flow}\"}}[$__range]))", "")],
+               "short", "FAST başarısız sonuç verdi; bloke tutar iade edildi (RELEASED).", graph=False, decimals=0), 6, 4)
+    b.add(stat("Bakiye yetersiz (reddedilen)", [(f"sum(increase(reconciler_saga_state_rejected_total{{impl=\"flink\", flow=\"{flow}\"}}[$__range]))", "")],
+               "short", "Ledger bloke etmedi; transfer gönderilmedi (BLOCK_REJECTED).", graph=False, decimals=0), 6, 4)
+    b.add(stat("Manuel inceleme", [(f"sum(increase(reconciler_saga_manual_review_total{{impl=\"flink\", flow=\"{flow}\"}}[$__range]))", "")],
+               "short", "Komut cevapsız kaldı veya sonuç gelmedi. 0 olmalı.",
+               thresholds(("green", None), ("red", 1)), graph=False, decimals=0), 6, 4)
+    b.add(timeseries("Saga durum geçişleri / dk", [
+        (f"sum(rate(reconciler_saga_state_{st.lower()}_total{{impl=\"flink\", flow=\"{flow}\"}}[$__rate_interval])) * 60", st)
+        for st in ("REQUESTED", "BLOCKED", "SETTLING", "COMPLETED", "RELEASING", "FAILED", "REJECTED", "MANUAL_REVIEW")
+    ], "short", "Her durumun dakikadaki giriş sayısı."), 12, 8)
+    b.add(timeseries("Yeniden gönderim, manuel inceleme ve çakışma / dk", [
+        (f"sum(rate(reconciler_saga_retries_total{{impl=\"flink\", flow=\"{flow}\"}}[$__rate_interval])) * 60", "yeniden gönderim (ledger yanıtı gecikti)"),
+        (f"sum(rate(reconciler_saga_manual_review_total{{impl=\"flink\", flow=\"{flow}\"}}[$__rate_interval])) * 60", "manuel inceleme"),
+        (f"sum(rate(reconciler_saga_conflicts_total{{impl=\"flink\", flow=\"{flow}\"}}[$__rate_interval])) * 60", "çakışma (beklenmeyen olay)"),
+    ], "short", "Çakışma: sırası uymayan ya da tekrar eden olay. Yeniden gönderim ve çakışma 0'a yakın olmalı.",
+        th=thresholds(("green", None), ("red", 1))), 12, 8)
+
     b.row("Flink job")
     tm = sel(flow=flow)
     b.add(timeseries("Task başına kayıt / s (giriş)", [

@@ -1066,12 +1066,531 @@
     },
     {
       "type": "row",
-      "title": "Flink job",
+      "title": "Saga (bloke → gönderim → sonuç)",
       "id": 17,
       "collapsed": false,
       "gridPos": {
         "x": 0,
         "y": 45,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "Kesinleşen (son 1 saat)",
+      "description": "Bloke edilip gönderilen ve kesinleştirilen transferler (SETTLED).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum(increase(reconciler_saga_state_completed_total{impl=\"flink\", flow=\"fast\"}[$__range]))",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 46,
+        "w": 6,
+        "h": 4
+      },
+      "id": 18
+    },
+    {
+      "type": "stat",
+      "title": "Serbest bırakılan",
+      "description": "FAST başarısız sonuç verdi; bloke tutar iade edildi (RELEASED).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum(increase(reconciler_saga_state_failed_total{impl=\"flink\", flow=\"fast\"}[$__range]))",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 46,
+        "w": 6,
+        "h": 4
+      },
+      "id": 19
+    },
+    {
+      "type": "stat",
+      "title": "Bakiye yetersiz (reddedilen)",
+      "description": "Ledger bloke etmedi; transfer gönderilmedi (BLOCK_REJECTED).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum(increase(reconciler_saga_state_rejected_total{impl=\"flink\", flow=\"fast\"}[$__range]))",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 46,
+        "w": 6,
+        "h": 4
+      },
+      "id": 20
+    },
+    {
+      "type": "stat",
+      "title": "Manuel inceleme",
+      "description": "Komut cevapsız kaldı veya sonuç gelmedi. 0 olmalı.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum(increase(reconciler_saga_manual_review_total{impl=\"flink\", flow=\"fast\"}[$__range]))",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 46,
+        "w": 6,
+        "h": 4
+      },
+      "id": 21
+    },
+    {
+      "type": "timeseries",
+      "title": "Saga durum geçişleri / dk",
+      "description": "Her durumun dakikadaki giriş sayısı.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum(rate(reconciler_saga_state_requested_total{impl=\"flink\", flow=\"fast\"}[$__rate_interval])) * 60",
+          "legendFormat": "REQUESTED",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "B",
+          "expr": "sum(rate(reconciler_saga_state_blocked_total{impl=\"flink\", flow=\"fast\"}[$__rate_interval])) * 60",
+          "legendFormat": "BLOCKED",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "C",
+          "expr": "sum(rate(reconciler_saga_state_settling_total{impl=\"flink\", flow=\"fast\"}[$__rate_interval])) * 60",
+          "legendFormat": "SETTLING",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "D",
+          "expr": "sum(rate(reconciler_saga_state_completed_total{impl=\"flink\", flow=\"fast\"}[$__rate_interval])) * 60",
+          "legendFormat": "COMPLETED",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "E",
+          "expr": "sum(rate(reconciler_saga_state_releasing_total{impl=\"flink\", flow=\"fast\"}[$__rate_interval])) * 60",
+          "legendFormat": "RELEASING",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "F",
+          "expr": "sum(rate(reconciler_saga_state_failed_total{impl=\"flink\", flow=\"fast\"}[$__rate_interval])) * 60",
+          "legendFormat": "FAILED",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "G",
+          "expr": "sum(rate(reconciler_saga_state_rejected_total{impl=\"flink\", flow=\"fast\"}[$__rate_interval])) * 60",
+          "legendFormat": "REJECTED",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "H",
+          "expr": "sum(rate(reconciler_saga_state_manual_review_total{impl=\"flink\", flow=\"fast\"}[$__rate_interval])) * 60",
+          "legendFormat": "MANUAL_REVIEW",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 50,
+        "w": 12,
+        "h": 8
+      },
+      "id": 22
+    },
+    {
+      "type": "timeseries",
+      "title": "Yeniden gönderim, manuel inceleme ve çakışma / dk",
+      "description": "Çakışma: sırası uymayan ya da tekrar eden olay. Yeniden gönderim ve çakışma 0'a yakın olmalı.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum(rate(reconciler_saga_retries_total{impl=\"flink\", flow=\"fast\"}[$__rate_interval])) * 60",
+          "legendFormat": "yeniden gönderim (ledger yanıtı gecikti)",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "B",
+          "expr": "sum(rate(reconciler_saga_manual_review_total{impl=\"flink\", flow=\"fast\"}[$__rate_interval])) * 60",
+          "legendFormat": "manuel inceleme",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "C",
+          "expr": "sum(rate(reconciler_saga_conflicts_total{impl=\"flink\", flow=\"fast\"}[$__rate_interval])) * 60",
+          "legendFormat": "çakışma (beklenmeyen olay)",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 50,
+        "w": 12,
+        "h": 8
+      },
+      "id": 23
+    },
+    {
+      "type": "row",
+      "title": "Flink job",
+      "id": 24,
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 58,
         "w": 24,
         "h": 1
       },
@@ -1145,11 +1664,11 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 46,
+        "y": 59,
         "w": 12,
         "h": 7
       },
-      "id": 18
+      "id": 25
     },
     {
       "type": "timeseries",
@@ -1230,20 +1749,20 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 46,
+        "y": 59,
         "w": 12,
         "h": 7
       },
-      "id": 19
+      "id": 26
     },
     {
       "type": "row",
       "title": "Loglar",
-      "id": 20,
+      "id": 27,
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 53,
+        "y": 66,
         "w": 24,
         "h": 1
       },
@@ -1316,11 +1835,11 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 54,
+        "y": 67,
         "w": 24,
         "h": 6
       },
-      "id": 21
+      "id": 28
     },
     {
       "type": "logs",
@@ -1351,11 +1870,11 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 60,
+        "y": 73,
         "w": 12,
         "h": 10
       },
-      "id": 22
+      "id": 29
     },
     {
       "type": "logs",
@@ -1386,11 +1905,11 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 60,
+        "y": 73,
         "w": 12,
         "h": 10
       },
-      "id": 23
+      "id": 30
     }
   ]
 }

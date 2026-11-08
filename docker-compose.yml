@@ -44,7 +44,7 @@ services:
     command:
       - |
         set -e
-        for topic in fast_incoming_request fast_incoming_success fast_incoming_failed fast_outgoing_request fast_outgoing_success fast_outgoing_failed havale_request havale_success havale_failed eft_incoming_request eft_incoming_success eft_incoming_failed eft_outgoing_request eft_outgoing_success eft_outgoing_failed fast_transfer_matched fast_transfer_unmatched havale_transfer_matched havale_transfer_unmatched eft_transfer_matched eft_transfer_unmatched; do
+        for topic in fast_incoming_request fast_incoming_success fast_incoming_failed fast_outgoing_request fast_outgoing_success fast_outgoing_failed havale_request havale_success havale_failed eft_incoming_request eft_incoming_success eft_incoming_failed eft_outgoing_request eft_outgoing_success eft_outgoing_failed fast_transfer_matched fast_transfer_unmatched havale_transfer_matched havale_transfer_unmatched eft_transfer_matched eft_transfer_unmatched fast_transfer_status havale_transfer_status eft_transfer_status ledger_commands ledger_results; do
           /opt/kafka/bin/kafka-topics.sh --create --if-not-exists --topic "$$topic" --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1
         done
     depends_on:
@@ -119,6 +119,21 @@ services:
       METRICS_ADDR: http://0.0.0.0:2114
     expose:
       - "2114"
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+
+  # Mock account ledger for the transfer saga: blocks, settles and releases amounts on the saga's
+  # commands and answers on ledger_results. BLOCK_REJECT_RATE is the share of blocks rejected for
+  # insufficient balance.
+  ledger:
+    build: ./ledger
+    image: ledger:local
+    restart: unless-stopped
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      BLOCK_REJECT_RATE: "0.1"
+      LEDGER_LATENCY_MS: "5-20"
     depends_on:
       kafka-init:
         condition: service_completed_successfully

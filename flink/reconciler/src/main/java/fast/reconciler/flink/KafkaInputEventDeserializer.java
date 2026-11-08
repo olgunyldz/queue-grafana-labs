@@ -53,6 +53,7 @@ final class KafkaInputEventDeserializer implements KafkaRecordDeserializationSch
         JsonNode payload = root.path("payload");
         InputEvent event = new InputEvent();
         event.transactionId = transactionId;
+        event.flow = text(root, "flow");
         event.event = eventName;
         event.amount = payload.path("amount").asDouble();
         event.failureReason = text(payload, "failure_reason");

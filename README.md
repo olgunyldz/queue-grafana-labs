@@ -57,6 +57,7 @@ Eşleştirmeyi Flink yapar: her akışın (FAST, Havale, EFT) kendi Flink cluste
 | `flink-taskmanager` (3 replika) | Apache Flink 2.1.3 | Job task’lerini çalıştırır (5 slot) | Metrics portu `9249` |
 | `flink-job-supervisor` | Flink image | FAST, Havale ve EFT job’larını çalışır tutar; checkpoint’ten yeniden başlatır | Sürekli çalışır |
 | `kafka-exporter` | kafka-exporter | Consumer group lag ve offset metrikleri | `9308` |
+| `ledger` | Python (mock) | Transfer saga’sı için hesap ledger’ı: bloke, kesinleştirme, serbest bırakma | — |
 | `kafka-jmx-exporter` | prometheus/jmx_exporter 1.7.0 (resmi jar, checksum ile sabit) | Kafka broker metrikleri | `5556` |
 | `prometheus` | Prometheus | Metrikleri scrape eder ve saklar | `http://localhost:9090` |
 | `loki` | Loki | Logları saklar | `http://localhost:3100` |
@@ -194,6 +195,22 @@ Invoke-RestMethod http://localhost:18081/jobs/overview
 ```
 
 Beklenen job adları `flink-<flow>-reconciler`; üçü de `RUNNING` olmalıdır.
+
+## Transfer saga (bloke → gönderim → sonuç)
+
+Her transfer, bakiye işini Flink'ten ayrı tutan bir saga ile yürür. Flink yalnızca durumu ve adımların sırasını yönetir; bakiyeyi [ledger](./ledger/) servisi (mock) tutar.
+
+| Adım | Ne olur | Sonraki durum |
+|---|---|---|
+| İstek | Flink `BLOCK` komutu gönderir (`ledger_commands`) | `REQUESTED` |
+| Ledger yanıtı | `BLOCKED`: bakiye ayrıldı; `BLOCK_REJECTED`: yetersiz bakiye (rastgele, `BLOCK_REJECT_RATE`) | `BLOCKED` / `REJECTED` (son) |
+| FAST sonucu başarılı | `SETTLE` → ledger `SETTLED` | `COMPLETED` (son) |
+| FAST sonucu başarısız | `RELEASE` → ledger `RELEASED` | `FAILED` (son) |
+| Zaman aşımı | Komut cevapsız kalırsa `SAGA_COMMAND_TIMEOUT` (30 s) sonra yeniden gönderilir; `SAGA_MAX_ATTEMPTS` (3) sonunda, ya da bloke tutarın FAST sonucu `SAGA_OUTCOME_TIMEOUT` (10 dk) içinde gelmemesinde | `MANUAL_REVIEW` (son) |
+
+Her durum değişikliği `<akış>_transfer_status` topic'ine yazılır (`fast_transfer_status`, `havale_transfer_status`, `eft_transfer_status`). Komutlar idempotent: ledger aynı komuta aynı yanıtı verir, saga tekrar gelen yanıtları çakışma olarak sayar. Yanıt önce gelirse (FAST sonucu bloke onayından önce) sonuç bekletilir.
+
+Sayılar Geliştirici panosunun **Saga** bölümünde; "Manuel inceleme" için `transfer-saga-manual-review` uyarısı vardır.
 
 ## Grafana ve gözlemlenebilirlik
 
