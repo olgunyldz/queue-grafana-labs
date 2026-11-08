@@ -242,7 +242,9 @@ Alarmlar Grafana Alerting ile tanımlıdır. Her alarm **akış başına ayrı b
 | No Flink jobs running / No registered TaskManagers | çalışan job veya TaskManager yok | critical | SRE → Durum; Flink UI |
 | No available task slots | boş slot < 1 (5 dk) | warning | SRE → Boş slot |
 | Job restart spike | 10 dk'da > 3 restart | warning | SRE → Checkpoint ve restart; loglar |
-| Checkpoint failure / duration high | 10 dk'da başarısız checkpoint > 0 (job'un ilk 11 dakikasında ≥ 2) / süre > 30 s | critical / warning | SRE → Checkpoint. Job başlarken task'lar hazır olmadığından ilk checkpoint başarısız olabilir; bu tek başarısızlık alarm üretmez. |
+| Checkpoint failure | son 5 dk'da başarısız checkpoint (job'un ilk 6 dakikası hariç) | critical | SRE → Checkpoint. Job başlarken task'lar hazır olmadan tetiklenen checkpoint'ler başarısız olabilir; bunlar sayılmaz. |
+| Checkpoint stale | son tamamlanan checkpoint 60 s'den eski (2 dk) | critical | SRE → Checkpoint yaşı. Checkpoint'ler hiç tamamlanmıyor (açılış dahil); state ve offset'ler kaydedilmiyor. |
+| Checkpoint duration high | son checkpoint > 30 s | warning | SRE → Checkpoint süresi |
 | TaskManager CPU / heap high | > %85 (10 dk) | warning | SRE → Kaynaklar |
 | Operator backpressure high | > %60 (5 dk) | warning | SRE → Backpressure; Platform · Flink |
 | Kafka consumer lag high | > 10.000 mesaj (10 dk) | warning | SRE → Consumer lag; Platform · Kafka |
@@ -363,7 +365,7 @@ Uygulamanın stdout'a yazması yeterlidir; Alloy tüm container'ları `container
 - **`increase()` tahminidir.** Seçili aralık başında ve sonunda dış değerleme yaptığı için sayılar küsuratlı çıkabilir; adet panellerinde `round()` kullanılır. Kesin sayı gerektiğinde çıktı topic'leri esas alınır.
 - **Reconciler sayaçları "yan etki"dir.** Çıktı topic'leri exactly-once ile doğrudur; Flink bir checkpoint'ten yeniden başladığında son checkpoint'ten sonraki kayıtlar tekrar işlendiği için sayaçlar bir miktar fazla artabilir.
 - **Eşleşmiş ID'ler 10 dakika state'te tutulur** (geç gelen duplicate'leri yakalamak için). Yüksek hacimde checkpoint boyutu buna göre büyür; SRE → Checkpoint boyutu panelinden izlenir.
-- **İlk checkpoint** job başlarken task'lar hazır olmadığından başarısız olabilir; alarm bu tek başarısızlığı yok sayar (ilk 11 dakikada en az 2 başarısızlık gerekir).
+- **Açılıştaki checkpoint'ler** job başlarken task'lar hazır olmadığından başarısız olabilir (makine yüklüyse birden fazla). "Checkpoint failure" alarmı job'un ilk 6 dakikasını saymaz; bu sürede checkpoint'ler hiç tamamlanmazsa "Checkpoint stale" alarmı çalar.
 - **JobManager restart'ı** job'u en son tamamlanmış checkpoint'ten başlatır ([start-job.sh](./flink/reconciler/docker/start-job.sh)). Son checkpoint'ten sonra işlenen kayıtlar Kafka'dan tekrar okunur (çıktı exactly-once olduğu için topic'lerde tekrar oluşmaz, sayaçlar biraz fazla artabilir). State uyumsuz bir kod değişikliğinde `RESTORE_FROM_CHECKPOINT=false` ile boş state'le başlatılır.
 - **Consumer `/healthz`** Kafka duraklatılmış (bağlantı askıda) durumda erişimsizliği librdkafka zaman aşımından sonra (~45 s) fark eder; container tamamen kapanırsa hemen fark eder.
 - **Geçen hafta çizgileri** bir haftalık veri birikene kadar boştur. Prometheus verisi varsayılan olarak 15 gün tutulur.

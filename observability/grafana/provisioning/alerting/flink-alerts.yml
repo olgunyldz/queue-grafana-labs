@@ -12,8 +12,9 @@
 # | No registered TaskManagers         | registered TaskManagers < 1       | critical | 2m  |
 # | No available task slots            | available slots < 1               | warning  | 5m  |
 # | Flink job restart spike             | > 3 restarts in 10m               | warning  | 2m  |
-# | Flink checkpoint failure            | failed checkpoints in 10m: > 0,   | critical | 2m  |
-#                                       | >= 2 in the job's first 11 minutes |          |     |
+# | Flink checkpoint failure            | failed checkpoint in 5m, after    | critical | 2m  |
+#                                       | the job's first 6 minutes         |          |     |
+# | Flink checkpoint stale              | last completed checkpoint > 60s   | critical | 2m  |
 # | Flink checkpoint duration high      | last checkpoint > 30s             | warning  | 5m  |
 # | Flink TaskManager CPU high          | JVM CPU load > 85%                | warning  | 10m |
 # | Flink TaskManager heap high         | JVM heap usage > 85%              | warning  | 10m |
@@ -160,10 +161,11 @@ groups:
           - refId: A
             relativeTimeRange: { from: 900, to: 0 }
             datasourceUid: PBFA97CFB590B2093
-            # The first checkpoint of a freshly started job can fail because its tasks are still deploying.
-            # One such failure is ignored during the first 11 minutes (uptime > 660 s, so the 10 m window
-            # no longer covers the start); repeated failures (>= 2) alert at any time.
-            model: { refId: A, expr: '(increase(flink_jobmanager_job_numberOfFailedCheckpoints[10m]) > 1.5) or (increase(flink_jobmanager_job_numberOfFailedCheckpoints[10m]) and on (flow, job_id) (flink_jobmanager_job_uptime > 660000))', instant: true, range: false, intervalMs: 1000, maxDataPoints: 43200 }
+            # While a job starts, checkpoints triggered before its tasks are running fail (one or more,
+            # depending on how long deployment takes). Only failures after the job's first 6 minutes count
+            # (uptime > 360 s, so the 5 m window no longer covers the start). Checkpoints that never
+            # complete, also right after a start, are caught by "Flink checkpoint stale".
+            model: { refId: A, expr: 'increase(flink_jobmanager_job_numberOfFailedCheckpoints[5m]) and on (flow, job_id) (flink_jobmanager_job_uptime > 360000)', instant: true, range: false, intervalMs: 1000, maxDataPoints: 43200 }
           - refId: C
             datasourceUid: __expr__
             model: { refId: C, type: threshold, expression: A, conditions: [{ evaluator: { type: gt, params: [0] } }] }
@@ -173,7 +175,29 @@ groups:
         labels: { severity: critical, domain: flink }
         annotations:
           summary: "Flink checkpoint failure for {{ $labels.job_name }}"
-          description: "{{ if $values.A }}{{ printf \"%.0f\" $values.A.Value }} checkpoint(s){{ else }}A checkpoint{{ end }} failed in the last 10 minutes (flow {{ $labels.flow }}). A single failure right after the job starts is ignored."
+          description: "{{ if $values.A }}{{ printf \"%.0f\" $values.A.Value }} checkpoint(s){{ else }}A checkpoint{{ end }} failed in the last 5 minutes (flow {{ $labels.flow }}). Failures while the job starts are ignored."
+        isPaused: false
+
+      - uid: flink-checkpoint-stale
+        title: Flink checkpoint stale
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: PBFA97CFB590B2093
+            # Seconds since the last completed checkpoint (interval 10 s). Before the first completed
+            # checkpoint the timestamp is -1, which reads as very old; "for: 2m" covers a normal start.
+            model: { refId: A, expr: 'time() - max by (flow, job_id, job_name) (flink_jobmanager_job_lastCheckpointCompletedTimestamp) / 1000', instant: true, range: false, intervalMs: 1000, maxDataPoints: 43200 }
+          - refId: C
+            datasourceUid: __expr__
+            model: { refId: C, type: threshold, expression: A, conditions: [{ evaluator: { type: gt, params: [60] } }] }
+        for: 2m
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: critical, domain: flink }
+        annotations:
+          summary: "Flink checkpoint stale for {{ $labels.job_name }}"
+          description: "No checkpoint completed for {{ if $values.A }}{{ printf \"%.0f\" $values.A.Value }} s{{ else }}more than 60 s{{ end }} (flow {{ $labels.flow }}). State and Kafka offsets are not being saved; a restart would replay more data."
         isPaused: false
 
       - uid: flink-checkpoint-duration-high
