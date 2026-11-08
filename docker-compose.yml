@@ -10,8 +10,10 @@ x-flink-image: &flink-image
 
 x-flink-jobmanager: &flink-jobmanager
   <<: *flink-image
-  # Application mode: the JobManager runs the job in /opt/flink/usrlib.
-  command: standalone-job --job-classname fast.reconciler.flink.FlinkReconcilerJob
+  # Application mode: the JobManager runs the job in /opt/flink/usrlib. start-job.sh resumes it from
+  # the flow's latest checkpoint (volumes/flink-checkpoints/<flow>); RESTORE_FROM_CHECKPOINT=false
+  # starts with empty state.
+  entrypoint: [ "/opt/flink/docker/start-job.sh" ]
   depends_on:
     kafka-init:
       condition: service_completed_successfully

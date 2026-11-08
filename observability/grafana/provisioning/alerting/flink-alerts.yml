@@ -12,7 +12,8 @@
 # | No registered TaskManagers         | registered TaskManagers < 1       | critical | 2m  |
 # | No available task slots            | available slots < 1               | warning  | 5m  |
 # | Flink job restart spike             | > 3 restarts in 10m               | warning  | 2m  |
-# | Flink checkpoint failure            | failed checkpoints > 0 in 10m     | critical | 2m  |
+# | Flink checkpoint failure            | failed checkpoints in 10m: > 0,   | critical | 2m  |
+#                                       | >= 2 in the job's first 11 minutes |          |     |
 # | Flink checkpoint duration high      | last checkpoint > 30s             | warning  | 5m  |
 # | Flink TaskManager CPU high          | JVM CPU load > 85%                | warning  | 10m |
 # | Flink TaskManager heap high         | JVM heap usage > 85%              | warning  | 10m |
@@ -159,7 +160,10 @@ groups:
           - refId: A
             relativeTimeRange: { from: 900, to: 0 }
             datasourceUid: PBFA97CFB590B2093
-            model: { refId: A, expr: 'increase(flink_jobmanager_job_numberOfFailedCheckpoints[10m])', instant: true, range: false, intervalMs: 1000, maxDataPoints: 43200 }
+            # The first checkpoint of a freshly started job can fail because its tasks are still deploying.
+            # One such failure is ignored during the first 11 minutes (uptime > 660 s, so the 10 m window
+            # no longer covers the start); repeated failures (>= 2) alert at any time.
+            model: { refId: A, expr: '(increase(flink_jobmanager_job_numberOfFailedCheckpoints[10m]) > 1.5) or (increase(flink_jobmanager_job_numberOfFailedCheckpoints[10m]) and on (flow, job_id) (flink_jobmanager_job_uptime > 660000))', instant: true, range: false, intervalMs: 1000, maxDataPoints: 43200 }
           - refId: C
             datasourceUid: __expr__
             model: { refId: C, type: threshold, expression: A, conditions: [{ evaluator: { type: gt, params: [0] } }] }
@@ -169,7 +173,7 @@ groups:
         labels: { severity: critical, domain: flink }
         annotations:
           summary: "Flink checkpoint failure for {{ $labels.job_name }}"
-          description: A checkpoint failed in the last 10 minutes.
+          description: "{{ if $values.A }}{{ printf \"%.0f\" $values.A.Value }} checkpoint(s){{ else }}A checkpoint{{ end }} failed in the last 10 minutes (flow {{ $labels.flow }}). A single failure right after the job starts is ignored."
         isPaused: false
 
       - uid: flink-checkpoint-duration-high

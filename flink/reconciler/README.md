@@ -49,6 +49,14 @@ Set on the JobManager service (the job's `main` runs there in application mode):
 
 Durations accept `500ms`, `30s`, `10m`, `1h` or plain milliseconds; an invalid value fails the job at start.
 
+## Restart from checkpoint
+
+The JobManager entrypoint [docker/start-job.sh](docker/start-job.sh) starts the job from the flow's newest
+completed checkpoint (`/opt/flink/checkpoints/<flow>/<job-id>/chk-N`, NO_CLAIM mode) and deletes the
+checkpoint directories of older runs. Without it, a restarted JobManager (no HA) would start the job
+with empty state. Set `RESTORE_FROM_CHECKPOINT=false` to start with empty state, e.g. after an
+incompatible state change.
+
 ## Tests
 
 ```powershell
