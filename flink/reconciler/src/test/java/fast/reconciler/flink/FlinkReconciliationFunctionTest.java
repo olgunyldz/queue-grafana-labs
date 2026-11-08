@@ -22,7 +22,8 @@ class FlinkReconciliationFunctionTest {
     @BeforeEach
     void setUp() throws Exception {
         FlinkReconcilerConfig config = new FlinkReconcilerConfig(
-                "dummy:9092", "fast-flink-test", "fast_send", "fast_send_success", "fast_send_failed",
+                "dummy:9092", "fast", "fast-flink-test",
+                "fast_send,fast_outgoing_request", "fast_send_success", "fast_send_failed,fast_outgoing_failed",
                 "fast_transfer_matched", "fast_transfer_unmatched", 30_000, 600_000, 10_000, 1);
         harness = new KeyedOneInputStreamOperatorTestHarness<>(
                 new KeyedProcessOperator<>(new FlinkReconciliationFunction(config)),
@@ -32,6 +33,8 @@ class FlinkReconciliationFunctionTest {
                 1,
                 0);
         harness.open();
+        // The test processing-time service starts at Long.MIN_VALUE; start the clock at 0.
+        harness.setProcessingTime(0);
     }
 
     @AfterEach
@@ -85,6 +88,71 @@ class FlinkReconciliationFunctionTest {
         JsonNode result = JSON.readTree(outputs.get(0).value);
         assertEquals("fast_transfer_unmatched", outputs.get(0).topic);
         assertEquals("send_without_outcome", result.get("kind").asText());
+    }
+
+    @Test
+    void matchesSendFromAnyConfiguredSendTopic() throws Exception {
+        harness.processElement(new StreamRecord<>(event("fast_outgoing_request", "tx-4", 50, "", 1_000)));
+        harness.processElement(new StreamRecord<>(event(
+                "fast_outgoing_failed", "tx-4", 50, ",\"failure_reason\":\"TIMEOUT\"", 1_500)));
+
+        List<OutputRecord> outputs = harness.extractOutputValues();
+        assertEquals(1, outputs.size());
+        assertEquals("fast_transfer_matched", outputs.get(0).topic);
+        assertEquals("fast_outgoing_failed", JSON.readTree(outputs.get(0).value).get("outcome").asText());
+    }
+
+    @Test
+    void oldBacklogEventIsNotExpiredBeforeItsOutcomeArrives() throws Exception {
+        // Record timestamps are an hour older than the reconciler clock (catching up on a backlog).
+        harness.setProcessingTime(3_600_000);
+        harness.processElement(new StreamRecord<>(event("fast_send", "tx-5", 10, "", 1)));
+        harness.setProcessingTime(3_600_001);
+        assertTrue(harness.extractOutputValues().isEmpty());
+
+        harness.processElement(new StreamRecord<>(event("fast_send_success", "tx-5", 10, "", 501)));
+        List<OutputRecord> outputs = harness.extractOutputValues();
+        assertEquals(1, outputs.size());
+        assertEquals("fast_transfer_matched", outputs.get(0).topic);
+        assertEquals(500, JSON.readTree(outputs.get(0).value).get("completion_ms").asLong());
+    }
+
+    @Test
+    void duplicateAfterMatchDoesNotBecomeUnmatched() throws Exception {
+        harness.processElement(new StreamRecord<>(event("fast_send", "tx-6", 10, "", 1_000)));
+        harness.processElement(new StreamRecord<>(event("fast_send_success", "tx-6", 10, "", 1_200)));
+        harness.processElement(new StreamRecord<>(event("fast_send", "tx-6", 10, "", 1_300)));
+
+        harness.setProcessingTime(2 * 600_000);
+        List<OutputRecord> outputs = harness.extractOutputValues();
+        assertEquals(1, outputs.size());
+        assertEquals("fast_transfer_matched", outputs.get(0).topic);
+        assertEquals(0, harness.numKeyedStateEntries());
+    }
+
+    @Test
+    void restoresGaugesFromCheckpoint() throws Exception {
+        harness.processElement(new StreamRecord<>(event("fast_send", "tx-7", 10, "", 1_000)));
+        var snapshot = harness.snapshot(1, 1);
+        harness.close();
+
+        FlinkReconcilerConfig config = new FlinkReconcilerConfig(
+                "dummy:9092", "fast", "fast-flink-test", "fast_send", "fast_send_success", "fast_send_failed",
+                "fast_transfer_matched", "fast_transfer_unmatched", 30_000, 600_000, 10_000, 1);
+        FlinkReconciliationFunction restored = new FlinkReconciliationFunction(config);
+        harness = new KeyedOneInputStreamOperatorTestHarness<>(
+                new KeyedProcessOperator<>(restored),
+                FlinkReconciliationFunction::transactionId,
+                BasicTypeInfo.STRING_TYPE_INFO, 1, 1, 0);
+        harness.setup();
+        harness.initializeState(snapshot);
+        harness.open();
+        assertEquals(1, restored.metrics().pending());
+
+        // The restored pending send still matches and the gauge goes back to 0 (not -1).
+        harness.processElement(new StreamRecord<>(event("fast_send_success", "tx-7", 10, "", 1_100)));
+        assertEquals(1, harness.extractOutputValues().size());
+        assertEquals(0, restored.metrics().pending());
     }
 
     private static InputEvent event(String name, String transactionId, double amount, String extra, long timestamp) {

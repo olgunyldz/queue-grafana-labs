@@ -8,7 +8,7 @@ RUN mvn -B package -DskipTests
 
 FROM flink:2.1.3-java21
 
-COPY --from=build /build/target/fast-flink-reconciler.jar /opt/flink/usrlib/fast-flink-reconciler.jar
+COPY --from=build /build/target/flink-reconciler.jar /opt/flink/usrlib/flink-reconciler.jar
 COPY conf/flink-conf.yaml /opt/flink/conf/config.yaml
 
 RUN mkdir -p /opt/flink/checkpoints

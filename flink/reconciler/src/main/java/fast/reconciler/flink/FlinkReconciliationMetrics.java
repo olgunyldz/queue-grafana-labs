@@ -1,13 +1,18 @@
 package fast.reconciler.flink;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Gauge;
 import org.apache.flink.metrics.MetricGroup;
 
-/** Flink implementation of the Kafka Streams reconciler metric contract. */
+/**
+ * Reconciler metrics, registered under the "reconciler" group. Prometheus normalizes the Flink names to
+ * reconciler_* (see observability/prometheus.yml) and adds the "flow" label per cluster, so FAST,
+ * Havale, EFT and the Kafka Streams reconciler share one metric contract.
+ */
 final class FlinkReconciliationMetrics {
     private static final double[] COMPLETION_BUCKETS =
             {0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600};
@@ -15,6 +20,7 @@ final class FlinkReconciliationMetrics {
             {100, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000};
 
     private final MetricGroup root;
+    private final Set<String> failedEvents;
     private final Counter invalid;
     private final AtomicLong pending = new AtomicLong();
     private final AtomicLong stuck = new AtomicLong();
@@ -22,8 +28,17 @@ final class FlinkReconciliationMetrics {
     private final Map<String, Counter> counters = new ConcurrentHashMap<>();
     private final Map<String, DoubleGauge> doubles = new ConcurrentHashMap<>();
 
-    FlinkReconciliationMetrics(MetricGroup root) {
-        this.root = root.addGroup("fast_kstreams_reconciler");
+    /**
+     * @param failedEvents event names that count as failures (a send/success/failed topic setting can list
+     *                     several comma-separated topics, so this is a set, not a single name)
+     * @param initialGauges {pending, stuck, orphanOutcomes} restored from the last checkpoint
+     */
+    FlinkReconciliationMetrics(MetricGroup root, Set<String> failedEvents, long[] initialGauges) {
+        this.root = root.addGroup("reconciler");
+        this.failedEvents = failedEvents;
+        pending.set(initialGauges[0]);
+        stuck.set(initialGauges[1]);
+        orphanOutcomes.set(initialGauges[2]);
         invalid = counter("invalid_events_total");
         this.root.gauge("pending", (Gauge<Long>) pending::get);
         this.root.gauge("stuck", (Gauge<Long>) stuck::get);
@@ -62,7 +77,7 @@ final class FlinkReconciliationMetrics {
             }
         }
         counter("amount_try_bucket", "outcome", outcome, "le", "+Inf").inc();
-        if ("fast_send_failed".equals(outcome)) {
+        if (failedEvents.contains(outcome)) {
             counter("failures_total", "reason", safeReason).inc();
         }
     }
@@ -108,7 +123,21 @@ final class FlinkReconciliationMetrics {
     }
 
     void unmarkStuck() {
-        stuck.updateAndGet(value -> Math.max(0, value - 1));
+        // No clamping at 0: after a rescale a subtask may decrement an entry counted by another
+        // subtask; per-subtask values can then go negative but the sum across subtasks stays exact.
+        stuck.decrementAndGet();
+    }
+
+    long pending() {
+        return pending.get();
+    }
+
+    long stuck() {
+        return stuck.get();
+    }
+
+    long orphanOutcomes() {
+        return orphanOutcomes.get();
     }
 
     private void transfer(String outcome, String role, String code, String bank) {

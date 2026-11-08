@@ -14,11 +14,14 @@ import java.nio.charset.StandardCharsets;
 import java.util.Properties;
 
 /**
- * Initial Flink job skeleton.
+ * Reconciliation job for one transfer flow (FLOW = fast | havale | eft):
+ * Kafka request/success/failed topics -> keyBy(transaction_id) -> FlinkReconciliationFunction
+ * -> matched / unmatched topics (exactly-once).
  *
- * <p>The reconciliation process function will be added next. Keeping source construction separate
- * from the processor makes the Kafka contract explicit and leaves the existing Kafka Streams
- * reconciler untouched during the migration.
+ * <p>Runs in application mode: each flow has its own Flink cluster and therefore its own state,
+ * checkpoints, consumer group, Kafka transactional ids and metrics endpoint.
+ *
+ * <p>Operators have fixed uids so state can be restored from a savepoint after code changes.
  */
 public final class FlinkReconcilerJob {
     private FlinkReconcilerJob() {
@@ -30,33 +33,39 @@ public final class FlinkReconcilerJob {
         environment.enableCheckpointing(config.checkpointIntervalMs());
         environment.setParallelism(config.parallelism());
 
-        DataStream<InputEvent> events = mergeSources(environment, config);
+        DataStream<InputEvent> events = environment
+                .fromSource(source(config), WatermarkStrategy.noWatermarks(), config.applicationId() + "-kafka-source")
+                .uid("kafka-source");
         DataStream<OutputRecord> outputs = events
                 .filter(input -> FlinkReconciliationFunction.transactionId(input) != null)
+                .uid("has-transaction-id")
+                .name("has-transaction-id")
                 .keyBy(FlinkReconciliationFunction::transactionId)
                 .process(new FlinkReconciliationFunction(config))
-                .name("fast-reconciliation");
+                .uid("reconciliation")
+                .name(config.applicationId() + "-reconciliation");
 
-        outputs.sinkTo(outputSink(config)).name("fast-reconciler-kafka-sink");
+        outputs.sinkTo(outputSink(config)).uid("kafka-sink").name(config.applicationId() + "-kafka-sink");
 
-        environment.execute("FAST Flink Reconciler");
-    }
-
-    private static DataStream<InputEvent> mergeSources(
-            StreamExecutionEnvironment environment,
-            FlinkReconcilerConfig config) {
-        return environment
-                .fromSource(source(config), WatermarkStrategy.noWatermarks(), "fast-reconciler-kafka-source");
+        environment.execute(config.applicationId());
     }
 
     private static KafkaSource<InputEvent> source(FlinkReconcilerConfig config) {
         return KafkaSource.<InputEvent>builder()
                 .setBootstrapServers(config.kafkaBrokers())
-                .setTopics(config.sendTopic(), config.successTopic(), config.failedTopic())
+                .setTopics(topics(config))
                 .setGroupId(config.applicationId())
                 .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
                 .setDeserializer(new KafkaInputEventDeserializer())
                 .build();
+    }
+
+    private static String[] topics(FlinkReconcilerConfig config) {
+        return java.util.stream.Stream.of(config.sendTopic(), config.successTopic(), config.failedTopic())
+                .flatMap(value -> java.util.Arrays.stream(value.split(",")))
+                .map(String::trim)
+                .filter(topic -> !topic.isEmpty())
+                .toArray(String[]::new);
     }
 
     private static KafkaSink<OutputRecord> outputSink(FlinkReconcilerConfig config) {

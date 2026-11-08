@@ -5,10 +5,10 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>fast</groupId>
-  <artifactId>fast-flink-reconciler</artifactId>
+  <artifactId>flink-reconciler</artifactId>
   <version>0.1.0-SNAPSHOT</version>
-  <name>FAST Flink Reconciler</name>
-  <description>Apache Flink implementation of the FAST transfer reconciliation flow.</description>
+  <name>Flink Transfer Reconciler</name>
+  <description>Apache Flink reconciler for the FAST, Havale and EFT transfer flows (one job per flow, selected with FLOW).</description>
 
   <properties>
     <maven.compiler.release>21</maven.compiler.release>
@@ -76,7 +76,7 @@
   </dependencies>
 
   <build>
-    <finalName>fast-flink-reconciler</finalName>
+  <finalName>flink-reconciler</finalName>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
