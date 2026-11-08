@@ -148,32 +148,6 @@ services:
       kafka-init:
         condition: service_completed_successfully
 
-  # FAST reconciler (Java / Kafka Streams): legacy reconciliation service kept separate from the mock API.
-  # produces the FAST business metrics. State is in RocksDB + a changelog topic, so instances can be
-  # added, removed or restarted without losing in-flight transfers (one standby replica per task).
-  fast-reconciler:
-    profiles: [ "kstreams" ]
-    build: ./reconciler
-    image: fast-reconciler:local
-    deploy:
-      replicas: 2
-    environment:
-      KAFKA_BROKERS: kafka:9092
-      APPLICATION_ID: fast-reconciler
-      INPUT_TOPICS: fast_incoming_request,fast_incoming_success,fast_incoming_failed,fast_outgoing_request,fast_outgoing_success,fast_outgoing_failed
-      SEND_EVENTS: fast_incoming_request,fast_outgoing_request
-      FAILED_EVENTS: fast_incoming_failed,fast_outgoing_failed
-      FAST_PENDING_THRESHOLD: 30s
-      FAST_MATCH_TTL: 10m
-      NUM_STANDBY_REPLICAS: "1"
-      PROCESSING_GUARANTEE: exactly_once_v2
-      METRICS_PORT: "9400"
-    ports:
-      - "9400-9401:9400"
-    depends_on:
-      kafka-init:
-        condition: service_completed_successfully
-
   # ---- Flink reconcilers -------------------------------------------------------------------
   # One image (flink/reconciler), one Flink cluster per flow in application mode: the job starts
   # with its JobManager, so there is no separate submit step and no double submission on "up".

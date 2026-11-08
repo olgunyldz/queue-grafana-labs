@@ -592,7 +592,7 @@
           "sort": "desc"
         }
       },
-      "description": "fast-send-backlog test: the fast_send line climbs, then drops once the consumers start."
+      "description": "request-backlog test (reconciler stopped): the fast_incoming_request line climbs, then drops once the reconciler starts again."
     },
     {
       "id": 10,

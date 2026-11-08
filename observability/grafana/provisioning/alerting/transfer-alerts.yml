@@ -14,11 +14,10 @@
 # | Transfer failed count high                     | > 500                              | critical | 5m  |
 # | Transfer failed/success ratio high             | > 20%                              | critical | 5m  |
 # | Transfer stuck transfers high                  | > 50 waiting > 30s (reconciler)    | warning  | 5m  |
-# | FAST reconciler down (Kafka Streams)           | no Kafka Streams instance RUNNING  | critical | 2m  |
 #
 # Low-volume alerts are only evaluated during business hours (transfer:business_hours == 1);
 # outside those hours the query is empty and the rule stays Normal.
-# The last two rules read the reconcilers' own metrics instead of consumer group offsets.
+# The stuck-transfers rule reads the Flink reconcilers' own metrics instead of consumer group offsets.
 apiVersion: 1
 groups:
   - orgId: 1
@@ -264,7 +263,7 @@ groups:
           description: >-
             The failed outcomes / successful outcomes ratio is above 20% for the last 5 minutes.{{ if $values.A }} Current value: {{ humanizePercentage $values.A.Value }}.{{ end }}
         isPaused: false
-      # ---- Reconciler (Kafka Streams) -------------------------------------------------------
+      # ---- Reconciler metrics -------------------------------------------------------------------
       - uid: fast-stuck-transfers-high
         title: Transfer stuck transfers high
         condition: C
@@ -274,7 +273,7 @@ groups:
             datasourceUid: PBFA97CFB590B2093
             model:
               refId: A
-              expr: 'sum by (flow, impl) (reconciler_stuck)'
+              expr: 'sum by (flow) (reconciler_stuck)'
               instant: true
               range: false
               intervalMs: 1000
@@ -295,44 +294,13 @@ groups:
           domain: transfer
         annotations:
           summary: >-
-            Transfer stuck transfers high for flow {{ $labels.flow }} ({{ $labels.impl }}){{ if $values.A }}: {{ printf "%.0f" $values.A.Value }} transfers waiting > 30s{{ end }}
+            Transfer stuck transfers high for flow {{ $labels.flow }}{{ if $values.A }}: {{ printf "%.0f" $values.A.Value }} transfers waiting > 30s{{ end }}
           description: >-
             More than 50 requests have been waiting longer than 30 seconds for their outcome, for 5 minutes.
             The transfers that never get an outcome are written to the <flow>_transfer_unmatched topic after 10 minutes.
         isPaused: false
-      - uid: fast-reconciler-down
-        title: FAST reconciler down (Kafka Streams)
-        condition: C
-        data:
-          - refId: A
-            relativeTimeRange: { from: 600, to: 0 }
-            datasourceUid: PBFA97CFB590B2093
-            model:
-              refId: A
-              # Instances whose Kafka Streams client is RUNNING (state 2). Empty (no data -> OK) when the optional
-              # "kstreams" profile is not running at all, so the Flink-only default setup does not alert.
-              expr: 'count(kafka_stream_client_state{job="fast-reconciler"} == 2) or (count(up{job="fast-reconciler"}) * 0)'
-              instant: true
-              range: false
-              intervalMs: 1000
-              maxDataPoints: 43200
-          - refId: C
-            datasourceUid: __expr__
-            model:
-              refId: C
-              type: threshold
-              expression: A
-              conditions:
-                - evaluator: { type: lt, params: [1] }
-        for: 2m
-        noDataState: OK
-        execErrState: Error
-        labels:
-          severity: critical
-          domain: transfer
-        annotations:
-          summary: FAST reconciler down (no Kafka Streams instance RUNNING)
-          description: >-
-            No fast-reconciler instance has been RUNNING for 2 minutes. Completion time, bank, amount and stuck-transfer
-            metrics are not updated; the volume alerts (based on Kafka offsets) keep working.
-        isPaused: false
+
+# The Kafka Streams reconciler was removed; delete its alert rule from Grafana.
+deleteRules:
+  - orgId: 1
+    uid: fast-reconciler-down

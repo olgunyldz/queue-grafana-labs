@@ -1,5 +1,33 @@
 # Apache Flink Reconciler Gereksinimleri
 
+> **Not:** Bu doküman Flink geçişinin **ilk** gereksinimleridir ve tarihçe için olduğu gibi korunmuştur. Aşağıdaki metin hâlâ eski `fast_send` topic'lerinden ve `flink-fast-reconciler/` klasöründen bahseder. Güncel yapı için [README](./README.md), [flink/reconciler/README.md](./flink/reconciler/README.md) ve [dashboard.md](./dashboard.md) esas alınır.
+
+## Uygulama durumu (2026-11-08)
+
+✅ karşılandı · 🔄 farklı şekilde karşılandı · ⚠️ kısmen · ❌ yapılmadı
+
+| Gereksinim | Durum | Not |
+|---|---|---|
+| Ayrı Flink uygulaması, Kafka Streams korunur | 🔄 | Geçiş sonrasında Kafka Streams reconciler kaldırıldı (kodu git geçmişinde); Flink tek reconciler |
+| Klasör `flink-fast-reconciler/` | 🔄 | Tek proje `flink/reconciler/`; FAST, Havale ve EFT aynı kodla, akış başına ayrı job ve cluster (`FLOW`) |
+| Topic'ler `fast_send*` | 🔄 | Yönlü topic'ler: `fast_{incoming,outgoing}_{request,success,failed}`, `havale_*`, `eft_*` |
+| Output `fast_transfer_matched / unmatched` | ✅ | Akış başına `<akış>_transfer_matched / unmatched` |
+| Shadow topic'ler | ❌ | Flink doğrudan çıktı topic'lerine yazar |
+| Eşleştirme davranışı (§3) | ✅ | Ek olarak: TTL kaydın state'e girişinden sayılır (backlog'da sahte unmatched yok); eşleşmiş ID'ler 10 dk tutulur (geç gelen duplicate sayılır) |
+| Keyed state, RocksDB, checkpoint, exactly-once sink (§4) | ✅ | Checkpoint'ler `volumes/flink-checkpoints/<akış>` |
+| Restart sonrası state | ✅ | JobManager restart'ında `docker/start-job.sh` son checkpoint'ten devam eder; TaskManager / Kafka kesintisinde Flink kendi içinde geri yükler (elle doğrulandı) |
+| JobManager, Prometheus reporter (§5) | ✅ | Application mode; ayrı submit adımı yok |
+| En az iki TaskManager | ❌ | Akış başına bir TaskManager (4 slot, paralellik 3, bir yedek slot) |
+| Teknik metrikler (§6) | ✅ | Platform · Flink ve akış SRE panoları |
+| İş metrik adları `fast_reconciler_*` | 🔄 | `reconciler_*{flow}` |
+| Unit test: send/outcome sırası, success, failed, 10 dk unmatched, duplicate, state recovery | ✅ | `FlinkReconciliationFunctionTest`, `KafkaInputEventDeserializerTest`, `FlowTest` |
+| Unit test: 30 s stuck, aynı transaction için birden fazla outcome | ⚠️ | Mantık var (stuck timer, duplicate yolu); ayrı test yok |
+| Integration testler | ⚠️ | Otomatik değil; checkpoint'ten restart ve Kafka kesintisi elle doğrulandı |
+| Artillery `flink-*` senaryoları | ⚠️ | Ayrı `flink-*` case'leri yok; `request-backlog`, `missing-outcomes` vb. Flink üzerinde çalışır |
+| Kafka Streams kapalıyken Flink tek başına çalışır | ✅ | Kafka Streams kaldırıldı; Flink tek reconciler |
+
+---
+
 ## 1. Kapsam
 
 Apache Flink, mevcut [reconciler](./reconciler/) servisine alternatif olarak ayrı bir uygulama şeklinde geliştirilecektir. Mevcut Kafka Streams reconciler silinmeyecek, değiştirilmeyecek ve geçiş süresince çalışabilir durumda kalacaktır.

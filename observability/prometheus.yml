@@ -25,19 +25,6 @@ scrape_configs:
     relabel_configs:
       - target_label: impl
         replacement: dotnet
-  # Kafka Streams reconciler (FAST only, "kstreams" compose profile). Uses the same reconciler_*
-  # metric contract as Flink; impl="kstreams" tells the implementations apart.
-  - job_name: fast-reconciler
-    dns_sd_configs:
-      - names: [fast-reconciler]
-        type: A
-        port: 9400
-        refresh_interval: 10s
-    relabel_configs:
-      - target_label: impl
-        replacement: kstreams
-      - target_label: flow
-        replacement: fast
   # Flink TaskManagers of every per-flow cluster (reconciler operator metrics live here).
   # flow (fast | havale | eft) is taken from the service name: flink-<flow>-taskmanager.
   - job_name: flink-reconcilers
@@ -56,7 +43,7 @@ scrape_configs:
         target_label: flow
     # Flink's Prometheus reporter puts the MetricGroup path and the label keys into the metric name,
     # e.g. flink_taskmanager_job_task_operator_reconciler_outcome_role_bank_code_bank_transfers_total.
-    # Map them back to reconciler_<metric>, the contract shared with the Kafka Streams reconciler.
+    # Map them back to reconciler_<metric> (the metric contract used by dashboards and alerts).
     metric_relabel_configs:
       - source_labels: [__name__]
         # invalid_events_total is registered by the Kafka source's deserializer (extra "deserializer" scope).
@@ -73,7 +60,7 @@ scrape_configs:
         target_label: le
         replacement: +Inf
       # Flink replaces every non-alphanumeric character of a label value with "_" ("QNB / Enpara.com" ->
-      # "QNB___Enpara_com"). Restore the display names (same as the Kafka Streams reconciler, Banks.java):
+      # "QNB___Enpara_com"). Restore the display names (Turkish spelling of BankResolver.java's banks):
       # bank from bank_code, sender_bank (completion histogram) from its sanitized form.
       - source_labels: [bank_code]
         regex: '00010'

@@ -84,7 +84,7 @@ flowchart LR
 
 ### Metrik sözleşmesi
 
-- **`reconciler_*{impl, flow}`**: iş metrikleri. `flow` = `fast` / `havale` / `eft`; `impl` = `flink` (veya `kstreams` profili açıksa FAST için `kstreams`).
+- **`reconciler_*{flow}`**: Flink reconciler'ın iş metrikleri. `flow` = `fast` / `havale` / `eft` (ayrıca `impl="flink"`).
   - Bir transfer, isteği ve sonucu `transaction_id` ile eşleştiğinde **bir kez** sayılır. Banka ve tutar istekten alınır.
   - `outcome` etiketi sonucun event adıdır (`fast_incoming_success`, `havale_failed`…); yön ve sonuç buradan okunur.
   - Bekleyen / takılı / orphan sayıları checkpoint'e yazılır; restart sonrası kaldığı yerden devam eder.
@@ -230,7 +230,6 @@ Alarmlar Grafana Alerting ile tanımlıdır. Her alarm **akış başına ayrı b
 | **Transfer failed/success ratio high** | failed / success > %20 | Her zaman | critical | Trafik düşükken de anlamlı oransal bozulma | İş Birimi → En yüksek hata oranı |
 | **Transfer request/outcome mismatch** | \|request − outcome\| / request > %10 | Her zaman | warning | Sonucu gelmeyen istekler veya isteği olmayan sonuçlar | Geliştirici → Reconciler iç durumu, Kafka lag |
 | **Transfer stuck transfers high** | 30 s'den uzun bekleyen > 50 | Her zaman | warning | Müşterinin parası çıkmış ama sonuç gelmemiş | SRE → Takılan transfer; `<akış>_transfer_unmatched` topic'i |
-| **FAST reconciler down (Kafka Streams)** | RUNNING instance yok (2 dk) | Yalnızca `kstreams` profili çalışırken | critical | Kafka Streams reconciler durmuş | `docker compose logs fast-reconciler` |
 
 ### Flink alarmları
 

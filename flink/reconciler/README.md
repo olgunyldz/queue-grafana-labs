@@ -2,7 +2,6 @@
 
 Apache Flink reconciler for the FAST, Havale and EFT transfer flows. One code base and one image;
 each flow runs as its own job in its own Flink cluster (application mode), selected with `FLOW`.
-The Kafka Streams implementation in `../../reconciler/` (FAST only) is kept for comparison.
 
 ## Runtime
 

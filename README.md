@@ -1,10 +1,10 @@
-# FAST Transfer Events Lab
+# Transfer Events Lab (FAST, Havale, EFT)
 
-Bu proje, FAST transfer event’lerinin Kafka üzerinden taşınmasını, iki farklı reconciliation uygulamasıyla eşleştirilmesini ve Grafana’da gözlemlenmesini gösteren yerel bir laboratuvar ortamıdır.
+Bu proje FAST, Havale ve EFT transfer event'lerinin Kafka üzerinden taşınmasını, Apache Flink ile eşleştirilmesini (reconciliation) ve Grafana'da ekiplere göre gözlemlenmesini gösteren yerel bir laboratuvar ortamıdır.
 
 Projeyi yeni açan bir geliştirici için en önemli fikir şudur:
 
-> Producer `fast_send` event’ini yayınlar. Daha sonra aynı `transaction_id` için başarı veya hata sonucu gelir. Kafka Streams ve Flink reconciler’ları bu iki event’i eşleştirir, sonucu topic’lere yazar ve iş metrikleri üretir.
+> Producer bir transferin **request** event'ini yayınlar; daha sonra aynı `transaction_id` için **success** veya **failed** sonucu gelir. Her akışın (FAST, Havale, EFT) kendi Flink reconciler'ı bu iki event'i eşleştirir, sonucu `<akış>_transfer_matched` / `_unmatched` topic'lerine yazar ve iş metrikleri üretir.
 
 ## İçindekiler
 
@@ -26,31 +26,22 @@ Projeyi yeni açan bir geliştirici için en önemli fikir şudur:
 
 ```mermaid
 flowchart LR
-    Client["Client / Artillery / k6"] --> LB["producer-lb\n127.0.0.1:8080"]
-    LB --> P["mock-producer\n2 replica"]
+    Client["Client / Artillery / demo-traffic"] --> LB["producer-lb\n127.0.0.1:8080"]
+    LB --> P["mock-producer\n2 replika"]
     P --> K[(Kafka)]
 
-    K --> C["mock-consumer\n2 replica"]
-    K --> KS["fast-reconciler\nKafka Streams"]
-    K --> F["FAST Flink Reconciler\nFlink job"]
+    K --> C["mock-consumer"]
+    K --> F["Flink reconciler\nFAST / Havale / EFT\n(akış başına cluster)"]
 
-    KS --> O1[("fast_transfer_matched\nfast_transfer_unmatched")]
-    F --> O2[("fast_transfer_matched\nfast_transfer_unmatched")]
+    F --> O[("<akış>_transfer_matched\n<akış>_transfer_unmatched")]
 
-    P -. metrics .-> PM[Prometheus]
-    C -. metrics .-> PM
-    KS -. metrics .-> PM
-    F -. metrics .-> PM
+    P & C & F -. metrics .-> PM[Prometheus]
     K -. exporter metrics .-> PM
     PM --> G[Grafana]
-    P -. logs .-> A[Alloy]
-    C -. logs .-> A
-    KS -. logs .-> A
-    A --> L[Loki]
-    L --> G
+    P & C & F -. logs .-> A[Alloy] --> L[Loki] --> G
 ```
 
-Kafka Streams ve Flink reconciler’ları birbirinin yerine kullanılabilir iki ayrı uygulamadır. Karşılaştırma yapılabilmesi için ikisi de aynı input topic’lerini okur, aynı output topic sözleşmesini izler ve FAST iş metriklerini aynı mantıksal isimlerle üretir.
+Eşleştirmeyi Flink yapar: her akışın (FAST, Havale, EFT) kendi Flink cluster'ı vardır ve hepsi aynı kodu çalıştırır.
 
 ## Servisler
 
@@ -60,8 +51,7 @@ Kafka Streams ve Flink reconciler’ları birbirinin yerine kullanılabilir iki 
 | `kafka-init` | Kafka CLI | Gerekli topic’leri oluşturur | Tek seferlik servis |
 | `mock-producer` | .NET 10 | HTTP event API’si ve Kafka producer | İç port `8080` |
 | `producer-lb` | nginx | Producer replica’ları için tek giriş noktası | `http://127.0.0.1:8080` |
-| `mock-consumer` | .NET 10 | Input event’lerini tüketen örnek consumer | `2114`, `2115` |
-| `fast-reconciler` | Java 21 / Kafka Streams | FAST event’lerini eşleştirir | `9400`, `9401` metrics |
+| `mock-consumer` | .NET 10 | Her akışın topic'lerini kendi consumer group'uyla okur; `/healthz` | İç port `2114` |
 | `flink-checkpoint-init` | Flink image | Flink image’ını build eder, akış başına checkpoint klasörlerini hazırlar | Tek seferlik servis |
 | `flink-fast-jobmanager` | Apache Flink 2.1.3 | FAST cluster’ı; FAST job’unu application mode’da çalıştırır | `http://localhost:18082` |
 | `flink-havale-jobmanager` | Apache Flink 2.1.3 | Havale cluster’ı; Havale job’unu çalıştırır | `http://localhost:18083` |
@@ -74,33 +64,30 @@ Kafka Streams ve Flink reconciler’ları birbirinin yerine kullanılabilir iki 
 | `alloy` | Grafana Alloy | Docker loglarını Loki’ye gönderir | Internal |
 | `grafana` | Grafana | Dashboard ve alert ekranı | `http://localhost:3000` |
 
-`mock-producer`, `mock-consumer` ve Kafka Streams reconciler’ı Compose içinde iki replica ile çalışır. Flink tarafında her akışın (FAST, Havale, EFT) kendi cluster’ı vardır: bir JobManager ve bir TaskManager. Üç cluster da aynı image’ı ([flink/reconciler/](./flink/reconciler/)) kullanır; hangi akışın çalışacağını `FLOW` ortam değişkeni belirler. State, checkpoint, consumer group, Kafka transaction id’leri ve metrik endpoint’i her akış için ayrıdır.
+`mock-producer` iki replika, `mock-consumer` tek replika çalışır. Flink tarafında her akışın (FAST, Havale, EFT) kendi cluster’ı vardır: bir JobManager ve bir TaskManager. Üç cluster da aynı image’ı ([flink/reconciler/](./flink/reconciler/)) kullanır; hangi akışın çalışacağını `FLOW` ortam değişkeni belirler. State, checkpoint, consumer group, Kafka transaction id’leri ve metrik endpoint’i her akış için ayrıdır.
 
 ## Event akışı
 
 ### Input topic’leri
 
-| Event | HTTP endpoint | Kafka topic | Anlamı |
-|---|---|---|---|
-| `fast_incoming_success` | `POST /events/fast/incoming/success` | `fast_incoming_success` | FAST gelen başarılı |
-| `fast_incoming_failed` | `POST /events/fast/incoming/failed` | `fast_incoming_failed` | FAST gelen başarısız |
-| `fast_outgoing_success` | `POST /events/fast/outgoing/success` | `fast_outgoing_success` | FAST giden başarılı |
-| `fast_outgoing_failed` | `POST /events/fast/outgoing/failed` | `fast_outgoing_failed` | FAST giden başarısız |
-| `havale_success` | `POST /events/havale/success` | `havale_success` | Havale başarılı |
-| `havale_failed` | `POST /events/havale/failed` | `havale_failed` | Havale başarısız |
-| `eft_incoming_success` | `POST /events/eft/incoming/success` | `eft_incoming_success` | EFT gelen başarılı |
-| `eft_incoming_failed` | `POST /events/eft/incoming/failed` | `eft_incoming_failed` | EFT gelen başarısız |
-| `eft_outgoing_success` | `POST /events/eft/outgoing/success` | `eft_outgoing_success` | EFT giden başarılı |
-| `eft_outgoing_failed` | `POST /events/eft/outgoing/failed` | `eft_outgoing_failed` | EFT giden başarısız |
+Her event'in bir HTTP endpoint'i ve aynı adlı bir Kafka topic'i vardır. Kafka message key'i `transaction_id`'dir.
 
-Her event’in Kafka message key’i `transaction_id` değeridir. Mock consumer’lar kendi consumer group’larına ait event’leri okuyup loglar.
+| Akış | Request | Success | Failed |
+|---|---|---|---|
+| FAST gelen | `/events/fast/incoming/request` → `fast_incoming_request` | `…/success` → `fast_incoming_success` | `…/failed` → `fast_incoming_failed` |
+| FAST giden | `/events/fast/outgoing/request` → `fast_outgoing_request` | `…/success` → `fast_outgoing_success` | `…/failed` → `fast_outgoing_failed` |
+| Havale | `/events/havale/request` → `havale_request` | `…/success` → `havale_success` | `…/failed` → `havale_failed` |
+| EFT gelen | `/events/eft/incoming/request` → `eft_incoming_request` | `…/success` → `eft_incoming_success` | `…/failed` → `eft_incoming_failed` |
+| EFT giden | `/events/eft/outgoing/request` → `eft_outgoing_request` | `…/success` → `eft_outgoing_success` | `…/failed` → `eft_outgoing_failed` |
+
+Mock consumer her akışın topic'lerini kendi consumer group'uyla (`fast_incoming`, `fast_outgoing`, `havale`, `eft_incoming`, `eft_outgoing`) okur ve teknik metrik üretir.
 
 ### Output topic’leri
 
 | Topic | İçerik |
 |---|---|
-| `fast_transfer_matched` | `fast_send` ile başarı/hata sonucunun eşleştiği transferler |
-| `fast_transfer_unmatched` | TTL sonunda eşleşemeyen transferler |
+| `fast_transfer_matched`, `havale_transfer_matched`, `eft_transfer_matched` | Request'i ile sonucu eşleşen transferler (tutar, bankalar, sonuç, tamamlanma süresi) |
+| `fast_transfer_unmatched`, `havale_transfer_unmatched`, `eft_transfer_unmatched` | 10 dakikalık TTL sonunda eşleşemeyen request'ler veya sonuçlar |
 
 ## Projeyi çalıştırma
 
@@ -121,8 +108,8 @@ Durumu kontrol etmek için:
 
 ```powershell
 docker compose ps
-docker compose logs -f fast-reconciler
 docker compose logs -f flink-fast-jobmanager
+docker compose logs -f mock-consumer
 ```
 
 Flink job listesini görmek için (Havale `18083`, EFT `18084`):
@@ -142,55 +129,28 @@ Grafana anonim erişime de açıktır; dashboard’ları [http://localhost:3000]
 
 ## Test transferi gönderme
 
-Örneğin FAST gelen başarılı bir event gönderin:
+Bir transfer iki event'ten oluşur: request ve aynı `transaction_id` ile sonuç. Örneğin FAST gelen bir transfer:
+
+```powershell
+$body = '{"transaction_id":"tx-1001","amount":1250.75,"currency":"TRY","sender_bank":"00010","receiver_bank":"00046"}'
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8080/events/fast/incoming/request -ContentType 'application/json' -Body $body
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8080/events/fast/incoming/success -ContentType 'application/json' -Body $body
+```
+
+Başarısız sonuçta `failure_reason` zorunludur:
 
 ```powershell
 Invoke-RestMethod -Method Post `
-  -Uri http://127.0.0.1:8080/events/fast/incoming/success `
+  -Uri http://127.0.0.1:8080/events/havale/failed `
   -ContentType 'application/json' `
-  -Body '{"transaction_id":"tx-1001","amount":1250.75,"currency":"TRY","sender_bank":"00010","receiver_bank":"00046"}'
+  -Body '{"transaction_id":"tx-1002","amount":500,"failure_reason":"INSUFFICIENT_BALANCE"}'
 ```
 
-FAST giden başarısız event için:
+`transaction_id` ve `amount` (> 0) her event'te zorunludur; eşleşen kayıtta tutar ve bankalar request'ten alınır. Başarılı HTTP kabulü `202` (gövdede UUIDv7 event `id`), geçersiz body `400`, bilinmeyen endpoint `404`, Kafka istemci kuyruğuna yazılamazsa `503` döndürür.
 
-```powershell
-Invoke-RestMethod -Method Post `
-  -Uri http://127.0.0.1:8080/events/fast/outgoing/failed `
-  -ContentType 'application/json' `
-  -Body '{"transaction_id":"tx-1001","amount":1250.75,"sender_bank":"00010","receiver_bank":"00046"}'
-```
-
-Havale başarılı event için aynı JSON sözleşmesini kullanın:
-
-```powershell
-Invoke-RestMethod -Method Post `
-  -Uri http://127.0.0.1:8080/events/havale/success `
-  -ContentType 'application/json' `
-  -Body '{"transaction_id":"tx-1002","amount":500,"currency":"TRY","sender_bank":"00010","receiver_bank":"00046","failure_reason":"INSUFFICIENT_BALANCE"}'
-```
-
-Başarılı HTTP kabulü `202`, geçersiz body `400`, bilinmeyen event `404`, Kafka yazma hatası `503` döndürür.
+Panoları sürekli trafikle doldurmak için: `python performance/demo-traffic/traffic.py` (bkz. [dashboard.md → Demo akışı](./dashboard.md#5-demo-akışı)).
 
 ## Reconciler’lar
-
-### Kafka Streams reconciler
-
-Kaynak: [reconciler/](./reconciler/)
-
-Kafka Streams uygulaması `fast_send`, `fast_send_success` ve `fast_send_failed` topic’lerini okur. State, `transaction_id` ile keyed store’da tutulur. RocksDB local state’i Kafka changelog topic’i ile desteklenir; bu nedenle instance yeniden başlatıldığında state tekrar oluşturulabilir.
-
-Önemli ayarlar:
-
-| Environment variable | Varsayılan | Açıklama |
-|---|---:|---|
-| `KAFKA_BROKERS` | `kafka:9092` | Kafka adresi |
-| `APPLICATION_ID` | `fast-reconciler` | Kafka Streams application ID / consumer group |
-| `FAST_PENDING_THRESHOLD` | `30s` | Bu süreden uzun bekleyen transfer stuck sayılır |
-| `FAST_MATCH_TTL` | `10m` | Bu sürede eşleşmeyen transfer unmatched olur |
-| `FAST_SCAN_INTERVAL` | `5s` | State tarama sıklığı |
-| `NUM_STANDBY_REPLICAS` | `1` | Standby task sayısı |
-| `PROCESSING_GUARANTEE` | `exactly_once_v2` | Kafka Streams processing guarantee |
-| `REPARTITION_PARTITIONS` | `3` | Internal repartition topic partition sayısı |
 
 ### Flink reconciler
 
@@ -277,7 +237,7 @@ Panoların ayrıntılı açıklaması, alarmlar ve demo akışı için [dashboar
 - Hangi akışın Flink cluster’ı sorunlu: `Platform · Flink`.
 - API / consumer replikaları veya Kafka broker problemi: `Platform · Servisler`, `Platform · Kafka`.
 
-İş metrikleri `reconciler_*` adını ve `flow` etiketini kullanır. Kafka Streams reconciler (`kstreams` profili, yalnızca FAST) aynı metrikleri `impl="kstreams"` ile üretir; ayrı bir panosu yoktur, gerekirse Explore’dan sorgulanır.
+İş metrikleri `reconciler_*` adını ve `flow` etiketini kullanır.
 
 ### Alert listesi
 
@@ -292,15 +252,13 @@ Transfer alarmları [transfer-alerts.yml](./observability/grafana/provisioning/a
 | `Transfer outcome volume high` | Son 5 dakikada `6000`’den fazla outcome | critical | 5 dakika | Kafka consumer group offset’leri |
 | `Transfer failed count high` | Son 5 dakikada `500`’den fazla failed outcome | critical | 5 dakika | Kafka consumer group offset’leri |
 | `Transfer failed/success ratio high` | `failed / success` oranı `%20` üstü | critical | 5 dakika | Kafka consumer group offset’leri |
-| `Transfer stuck transfers high` | 30 saniyeden uzun bekleyen `50`’den fazla transfer | warning | 5 dakika | `reconciler_stuck` (Flink ve Kafka Streams) |
-| `FAST reconciler down (Kafka Streams)` | `kstreams` profili çalışırken RUNNING instance kalmaması | critical | 2 dakika | Kafka Streams client state |
+| `Transfer stuck transfers high` | 30 saniyeden uzun bekleyen `50`’den fazla transfer | warning | 5 dakika | `reconciler_stuck` (Flink reconciler) |
 
 Önemli noktalar:
 
 - Düşük hacim alert’leri yalnızca İstanbul saatiyle `09:00–18:00` arasında değerlendirilir.
 - İlk yedi alert reconciler consumer group’larının (`flink-<flow>-reconciler`) Kafka offset’lerine dayanır. Flink offset’leri checkpoint sırasında commit eder.
 - Bir akışa özel eşik gerekirse kuralı kopyalayıp sorguya `{flow="havale"}` gibi bir filtre ekleyin.
-- `FAST reconciler down (Kafka Streams)` yalnızca `kstreams` profili çalışıyorsa değerlendirilir.
 - Koşul ilk sağlandığında alert `Pending` olur. `for` süresi boyunca devam ederse `Firing` olur.
 - Alert’ler Grafana’da görünür; Slack veya e-posta gönderimi için ayrıca contact point ve notification policy tanımlanmalıdır.
 
@@ -314,12 +272,11 @@ Ana kaynaklar:
 |---|---|
 | Producer | `producer_*`, HTTP ve .NET runtime metrikleri |
 | Consumer | `consumer_*`, Kafka tüketim ve .NET runtime metrikleri |
-| Kafka Streams reconciler | `reconciler_*{impl="kstreams", flow="fast"}`, Kafka Streams ve JVM metrikleri |
 | Flink reconciler | Flink metric reporter’ı ve normalize edilmiş `reconciler_*{impl="flink", flow="<flow>"}` metrikleri |
 | Kafka exporter | Consumer group lag, offset ve üyelik metrikleri |
 | Kafka JMX exporter | Broker ve partition metrikleri |
 
-Flink’in Prometheus reporter’ı MetricGroup boyutlarını metric adının içine taşıdığı için Prometheus scrape konfigürasyonunda normalize edilir. Böylece Flink ve Kafka Streams iş metrikleri aynı sorgu sözleşmesini kullanır. `flow` etiketi scrape sırasında servis adından (`flink-<flow>-taskmanager` / `-jobmanager`) eklenir; Flink’in kendi metrikleri (checkpoint, restart, lag) de bu etiketi taşır.
+Flink’in Prometheus reporter’ı MetricGroup boyutlarını metric adının içine taşıdığı için Prometheus scrape konfigürasyonunda normalize edilir. Böylece panolar ve alarmlar kısa ve sabit `reconciler_*` adlarını kullanır. `flow` etiketi scrape sırasında servis adından (`flink-<flow>-taskmanager` / `-jobmanager`) eklenir; Flink’in kendi metrikleri (checkpoint, restart, lag) de bu etiketi taşır.
 
 Prometheus recording rule’ları [observability/prometheus/rules/transfers.yml](./observability/prometheus/rules/transfers.yml) dosyasındadır (`transfer:*`). Consumer group ve akış (`flow`, topic adından) bazında son 5 dakikalık hacim, başarı/başarısızlık oranı ve request/outcome mismatch hesaplarını üretir.
 
@@ -336,29 +293,27 @@ Kalıcı veriler proje altındaki [volumes/](./volumes/) klasöründe tutulur. B
 | `volumes/alloy` | Alloy | Alloy agent state’i |
 | `volumes/grafana` | Grafana | Grafana database ve state’i |
 
-Producer, consumer, exporter ve load balancer servisleri stateless’tir; bu nedenle onlar için gereksiz kalıcı data volume oluşturulmamıştır. Kafka Streams local RocksDB state’i changelog topic’i ile yeniden oluşturulabildiği için iki replica arasında ortak bir klasör paylaşılmaz.
+Producer, consumer, exporter ve load balancer servisleri stateless’tir; bu nedenle onlar için kalıcı data volume oluşturulmamıştır.
 
 ## Proje yapısı
 
 ```text
 dotnet/
   Shared/                    Ortak event modelleri ve yardımcıları
-  MockProducer/     HTTP API → Kafka producer
-  MockConsumer/     Kafka consumer ve teknik metrikler
-
-reconciler/                  Java Kafka Streams reconciler
-  src/main/                   Topology, state store ve business metrics
-  src/test/                   TopologyTestDriver testleri
+  MockProducer/              HTTP API → Kafka producer
+  MockConsumer/              Kafka consumer, teknik metrikler ve /healthz
 
 flink/reconciler/            Apache Flink reconciler (FAST, Havale, EFT; FLOW ile seçilir)
   src/main/                   Flink job, Flow varsayılanları, process function ve metrics
   src/test/                   Flink reconciliation testleri
   conf/                       Flink runtime config
+  docker/start-job.sh         JobManager giriş noktası (son checkpoint'ten devam)
 
 observability/
   prometheus.yml             Prometheus scrape ayarları
   prometheus/rules/           Recording rules
-  grafana/dashboards/         Dashboard JSON dosyaları
+  grafana/dashboards/         Dashboard JSON dosyaları (akış ve Platform klasörleri)
+  grafana/generate_team_dashboards.py  Ekip ve platform panolarının üreticisi
   grafana/provisioning/       Datasource, dashboard ve alert provisioning
   loki/                       Loki config
   alloy/                      Alloy config
@@ -366,8 +321,8 @@ observability/
   nginx/                      Producer load balancer config
 
 performance/
-  artillery/                  Artillery senaryoları ve raporları
-  producer.js                 k6 producer yük testi
+  artillery/                  Artillery yük ve alarm senaryoları
+  demo-traffic/traffic.py     Demo trafiği (Python, kurulum gerektirmez)
 
 volumes/                      Local persistent data; Git tarafından ignore edilir
 docker-compose.yml            Local stack tanımı
@@ -376,62 +331,43 @@ dashboard.md                 Dashboard ve alert ayrıntıları
 
 ## Performans testleri
 
-Artillery testleri [performance/artillery/](./performance/artillery/) altındadır. Kurulum:
+- **Demo trafiği:** [performance/demo-traffic/traffic.py](./performance/demo-traffic/traffic.py) — tüm akışlara başarısız ve sonuçsuz işlemler dahil sürekli trafik; yalnızca Python gerekir.
+- **Yük ve alarm testleri:** [performance/artillery/](./performance/artillery/) — case listesi, süreleri ve tetikledikleri alarmlar [Artillery README](./performance/artillery/README.md) dosyasındadır.
 
 ```powershell
 cd performance/artillery
 npm install
+npm run test:mixed-high-load
 ```
 
-Testler çalışırken ana stack’in hazır olması gerekir. Testler producer endpoint’i üzerinden event gönderir ve raporları `performance/artillery/reports/` altına JSON olarak yazar.
-
-| Komut | Senaryo |
-|---|---|
-| `npm run test:both-open` | Normal send → success/failed akışı |
-| `npm run test:fast-send-backlog` | Outcome olmadan send backlog oluşturma |
-| `npm run test:no-fast-send` | Yalnızca outcome event’leri |
-| `npm run test:missing-outcomes` | Send/outcome mismatch alarmı |
-| `npm run test:high-failure` | Yüksek failed oranı |
-| `npm run test:fast-send-spike` | Yüksek trafik |
-| `npm run test:low-volume` | Düşük trafik |
-| `npm run test:consumer-only` | Consumer `/metrics` endpoint kontrolü |
-| `npm run test:all` | Tüm senaryoları sırayla çalıştırır |
-
-Basit k6 testi:
-
-```powershell
-k6 run performance/producer.js
-$env:PRODUCER_URL = "http://127.0.0.1:8080"
-k6 run performance/producer.js
-```
-
-Performance testleri sırasında Docker image build, stack yeniden kurma, health check veya servis durumu değiştirme yapılmaz. Test hedeflerinin önceden hazırlanmış olması beklenir; Artillery runner senaryoyu doğrudan çalıştırır. `fast-send-backlog` gibi servis durumu gerektiren senaryolar için servisleri testten önce manuel olarak hazırlayın. Alert senaryolarını aynı anda çalıştırmayın; trafik ve alarm sinyalleri birbirine karışabilir.
+Runner Docker komutu çalıştırmaz ve servis durumunu değiştirmez. `request-backlog` gibi servis durumu gerektiren case'ler için servisleri testten önce elle hazırlayın. Alarm case'lerini aynı anda çalıştırmayın; trafikleri birbirine karışır.
 
 ## Geliştirme ve test
 
 ### .NET
 
 ```powershell
-dotnet build dotnet/FastTransfer.slnx
-dotnet test dotnet/FastTransfer.slnx
+dotnet build dotnet/FastTransfer.slnx   # .NET 10 SDK gerekir; alternatif: docker compose build mock-producer mock-consumer
 ```
 
-### Kafka Streams
-
-```powershell
-cd reconciler
-mvn test
-```
+.NET projelerinde henüz otomatik test yoktur.
 
 ### Flink
 
 ```powershell
-cd flink-fast-reconciler
+cd flink/reconciler
 mvn test
 mvn package -DskipTests
 ```
 
-Java testleri `TopologyTestDriver` ve Flink test harness ile local çalışır; Docker üzerinden test çalıştırmak gerekmez.
+Flink testleri Flink test harness ile local çalışır; Docker gerekmez.
+
+### Panolar
+
+```powershell
+python observability/grafana/generate_team_dashboards.py
+docker compose restart grafana
+```
 
 ## Sorun giderme
 
@@ -490,6 +426,7 @@ docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh `
 | Grafana Alloy | 1.21.3 |
 | nginx | 1.29.3-alpine |
 | kafka-exporter | 1.9.0 |
+| JMX exporter | 1.7.0 |
 | .NET | 10 |
 | Java | 21 |
 
