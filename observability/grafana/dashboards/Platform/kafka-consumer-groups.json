@@ -1,8 +1,8 @@
 {
   "uid": "kafka-consumer-groups",
-  "title": "Kafka Consumer Groups & Broker",
+  "title": "Platform · Kafka",
   "tags": [
-    "fast-lab",
+    "platform",
     "kafka"
   ],
   "editable": true,
@@ -33,10 +33,10 @@
   },
   "links": [
     {
-      "title": "FAST lab",
+      "title": "Platform panoları",
       "type": "dashboards",
       "tags": [
-        "fast-lab"
+        "platform"
       ],
       "asDropdown": true,
       "includeVars": false,

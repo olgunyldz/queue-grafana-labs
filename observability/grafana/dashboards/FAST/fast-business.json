@@ -1,0 +1,1851 @@
+{
+  "uid": "fast-business",
+  "title": "FAST · İş Birimi",
+  "description": "FAST transferlerinin iş görünümü: adet, başarı, hacim, süre, bankalar ve başarısızlık nedenleri.",
+  "tags": [
+    "fast",
+    "transfer-team",
+    "business"
+  ],
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "links": [
+    {
+      "title": "FAST panoları",
+      "type": "dashboards",
+      "tags": [
+        "fast"
+      ],
+      "asDropdown": true,
+      "includeVars": false,
+      "keepTime": true,
+      "icon": "external link"
+    },
+    {
+      "title": "Tüm akış panoları",
+      "type": "dashboards",
+      "tags": [
+        "transfer-team"
+      ],
+      "asDropdown": true,
+      "includeVars": false,
+      "keepTime": true,
+      "icon": "external link"
+    },
+    {
+      "title": "Platform panoları",
+      "type": "dashboards",
+      "tags": [
+        "platform"
+      ],
+      "asDropdown": true,
+      "includeVars": false,
+      "keepTime": true,
+      "icon": "external link"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "role",
+        "label": "Banka rolü",
+        "type": "custom",
+        "hide": 0,
+        "query": "Gönderen banka : sender,Alıcı banka : receiver",
+        "current": {
+          "text": "Gönderen banka",
+          "value": "sender"
+        },
+        "options": [
+          {
+            "text": "Gönderen banka",
+            "value": "sender",
+            "selected": true
+          },
+          {
+            "text": "Alıcı banka",
+            "value": "receiver",
+            "selected": false
+          }
+        ],
+        "multi": false,
+        "includeAll": false
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "text",
+      "title": "",
+      "options": {
+        "mode": "markdown",
+        "content": "### FAST · İş Birimi panosu\nFAST: 7/24 anlık transfer sistemi. Gelen (incoming) ve giden (outgoing) yönleri ayrı izlenir. Sayılar **seçili zaman aralığı** içindir (sağ üstten değiştirilebilir). Bir transfer, isteği ve sonucu eşleştiğinde **bir kez** sayılır; tutar ve banka bilgisi istekten alınır."
+      },
+      "transparent": true,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "id": 1
+    },
+    {
+      "type": "row",
+      "title": "Özet",
+      "id": 2,
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "Tamamlanan transfer",
+      "description": "İsteği ve sonucu eşleşen transfer sayısı.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "round(sum (increase(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"sender\"}[$__range])))",
+          "legendFormat": "Adet",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 4,
+        "h": 5
+      },
+      "id": 3
+    },
+    {
+      "type": "stat",
+      "title": "Başarı oranı",
+      "description": "Başarılı sonuçlanan transferlerin oranı. Hedef: %99 ve üzeri.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "round(sum (increase(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"sender\", outcome=~\"fast_(.+_)?success\"}[$__range]))) / clamp_min(round(sum (increase(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"sender\"}[$__range]))), 1)",
+          "legendFormat": "Başarı",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.95
+              },
+              {
+                "color": "green",
+                "value": 0.99
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 4,
+        "w": 4,
+        "h": 5
+      },
+      "id": 4
+    },
+    {
+      "type": "stat",
+      "title": "Başarılı hacim",
+      "description": "Başarılı transferlerin toplam tutarı.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum (increase(reconciler_volume_try_total{impl=\"flink\", flow=\"fast\", role=\"sender\", outcome=~\"fast_(.+_)?success\"}[$__range]))",
+          "legendFormat": "TRY",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyTRY",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 4,
+        "w": 4,
+        "h": 5
+      },
+      "id": 5
+    },
+    {
+      "type": "stat",
+      "title": "Ortalama tutar",
+      "description": "Transfer başına ortalama tutar.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum(increase(reconciler_amount_try_sum{impl=\"flink\", flow=\"fast\"}[$__range])) / clamp_min(sum(increase(reconciler_amount_try_count{impl=\"flink\", flow=\"fast\"}[$__range])), 1)",
+          "legendFormat": "TRY",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyTRY",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 4,
+        "h": 5
+      },
+      "id": 6
+    },
+    {
+      "type": "stat",
+      "title": "Tamamlanma süresi (p95)",
+      "description": "Transferlerin %95'i bu süreden kısa sürede sonuçlandı (istek → sonuç).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(reconciler_completion_seconds_bucket{impl=\"flink\", flow=\"fast\"}[$__range])))",
+          "legendFormat": "p95",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 4,
+        "w": 4,
+        "h": 5
+      },
+      "id": 7
+    },
+    {
+      "type": "stat",
+      "title": "Sonuçsuz kalan istek",
+      "description": "10 dakika içinde sonucu gelmeyen istekler. Müşteri tarafında belirsiz kalan işlemlerdir.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "round(sum(increase(reconciler_unmatched_total{impl=\"flink\", flow=\"fast\", kind=\"send_without_outcome\"}[$__range]))) or vector(0)",
+          "legendFormat": "Adet",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 4,
+        "w": 4,
+        "h": 5
+      },
+      "id": 8
+    },
+    {
+      "type": "row",
+      "title": "Zaman içinde",
+      "id": 9,
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Dakikada işlem (geçen haftayla)",
+      "description": "Dakikada sonuçlanan transfer. Kesikli gri çizgi: geçen haftanın aynı saati.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum (rate(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"sender\", outcome=~\"fast_(.+_)?success\"}[$__rate_interval])) * 60",
+          "legendFormat": "Başarılı",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "B",
+          "expr": "sum (rate(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"sender\", outcome=~\"fast_(.+_)?failed\"}[$__rate_interval])) * 60",
+          "legendFormat": "Başarısız",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "C",
+          "expr": "sum (rate(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"sender\"}[$__rate_interval] offset 1w)) * 60",
+          "legendFormat": "Toplam (geçen hafta)",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Toplam (geçen hafta)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8e8e8e"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    10
+                  ]
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Başarısız"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Başarılı"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 12,
+        "h": 8
+      },
+      "id": 10
+    },
+    {
+      "type": "timeseries",
+      "title": "Dakikada TRY hacmi",
+      "description": "Dakikada sonuçlanan transfer tutarı.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum(rate(reconciler_volume_try_total{impl=\"flink\", flow=\"fast\", role=\"sender\", outcome=~\"fast_(.+_)?success\"}[$__rate_interval])) * 60",
+          "legendFormat": "Başarılı",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "B",
+          "expr": "sum(rate(reconciler_volume_try_total{impl=\"flink\", flow=\"fast\", role=\"sender\", outcome=~\"fast_(.+_)?failed\"}[$__rate_interval])) * 60",
+          "legendFormat": "Başarısız",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyTRY",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Başarısız"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Başarılı"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 10,
+        "w": 12,
+        "h": 8
+      },
+      "id": 11
+    },
+    {
+      "type": "timeseries",
+      "title": "Başarı oranı",
+      "description": "Dakikalık başarı oranı. Kesikli çizgiler: %95 (uyarı) ve %99 (hedef).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum (rate(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"sender\", outcome=~\"fast_(.+_)?success\"}[$__rate_interval])) * 60 / clamp_min(sum (rate(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"sender\"}[$__rate_interval])) * 60, 1e-9)",
+          "legendFormat": "Başarı oranı",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.95
+              },
+              {
+                "color": "green",
+                "value": 0.99
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 12,
+        "h": 7
+      },
+      "id": 12
+    },
+    {
+      "type": "timeseries",
+      "title": "Tamamlanma süresi",
+      "description": "İstekten sonuca geçen süre (son 5 dakikalık pencere).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(reconciler_completion_seconds_bucket{impl=\"flink\", flow=\"fast\"}[5m])))",
+          "legendFormat": "Medyan (p50)",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(reconciler_completion_seconds_bucket{impl=\"flink\", flow=\"fast\"}[5m])))",
+          "legendFormat": "p95",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 18,
+        "w": 12,
+        "h": 7
+      },
+      "id": 13
+    },
+    {
+      "type": "row",
+      "title": "Gelen / giden",
+      "id": 14,
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "Gelen: transfer",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "round(sum (increase(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"sender\", outcome=~\"fast_incoming_.*\"}[$__range])))",
+          "legendFormat": "Adet",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 4,
+        "h": 4
+      },
+      "id": 15
+    },
+    {
+      "type": "stat",
+      "title": "Gelen: başarı oranı",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "round(sum (increase(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"sender\", outcome=\"fast_incoming_success\"}[$__range]))) / clamp_min(round(sum (increase(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"sender\", outcome=~\"fast_incoming_.*\"}[$__range]))), 1)",
+          "legendFormat": "Başarı",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.95
+              },
+              {
+                "color": "green",
+                "value": 0.99
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 26,
+        "w": 4,
+        "h": 4
+      },
+      "id": 16
+    },
+    {
+      "type": "stat",
+      "title": "Giden: transfer",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "round(sum (increase(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"sender\", outcome=~\"fast_outgoing_.*\"}[$__range])))",
+          "legendFormat": "Adet",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 26,
+        "w": 4,
+        "h": 4
+      },
+      "id": 17
+    },
+    {
+      "type": "stat",
+      "title": "Giden: başarı oranı",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "round(sum (increase(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"sender\", outcome=\"fast_outgoing_success\"}[$__range]))) / clamp_min(round(sum (increase(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"sender\", outcome=~\"fast_outgoing_.*\"}[$__range]))), 1)",
+          "legendFormat": "Başarı",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.95
+              },
+              {
+                "color": "green",
+                "value": 0.99
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 26,
+        "w": 4,
+        "h": 4
+      },
+      "id": 18
+    },
+    {
+      "type": "piechart",
+      "title": "Hacim dağılımı (TRY)",
+      "description": "Seçili aralıktaki toplam tutarın yönlere dağılımı.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum (increase(reconciler_volume_try_total{impl=\"flink\", flow=\"fast\", role=\"sender\", outcome=~\"fast_incoming_.*\"}[$__range]))",
+          "legendFormat": "Gelen",
+          "range": false,
+          "instant": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "B",
+          "expr": "sum (increase(reconciler_volume_try_total{impl=\"flink\", flow=\"fast\", role=\"sender\", outcome=~\"fast_outgoing_.*\"}[$__range]))",
+          "legendFormat": "Giden",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyTRY",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "pieType": "donut",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 26,
+        "w": 8,
+        "h": 8
+      },
+      "id": 19
+    },
+    {
+      "type": "timeseries",
+      "title": "Yöne göre dakikada işlem",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum (rate(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"sender\", outcome=~\"fast_incoming_.*\"}[$__rate_interval])) * 60",
+          "legendFormat": "Gelen",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "B",
+          "expr": "sum (rate(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"sender\", outcome=~\"fast_outgoing_.*\"}[$__rate_interval])) * 60",
+          "legendFormat": "Giden",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "right",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 16,
+        "h": 4
+      },
+      "id": 20
+    },
+    {
+      "type": "row",
+      "title": "Bankalar",
+      "id": 21,
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "Banka özeti",
+      "description": "Seçili banka rolüne (gönderen / alıcı) göre banka bazında özet. Hata oranı %5 üzerinde sarı, %15 üzerinde kırmızı.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "round(sum by (bank) (increase(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"$role\"}[$__range])))",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "B",
+          "expr": "round(sum by (bank) (increase(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"$role\", outcome=~\"fast_(.+_)?success\"}[$__range])))",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "C",
+          "expr": "round(sum by (bank) (increase(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"$role\", outcome=~\"fast_(.+_)?failed\"}[$__range])))",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "D",
+          "expr": "round(sum by (bank) (increase(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"$role\", outcome=~\"fast_(.+_)?failed\"}[$__range]))) / clamp_min(round(sum by (bank) (increase(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"$role\"}[$__range]))), 1)",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "E",
+          "expr": "sum by (bank) (increase(reconciler_volume_try_total{impl=\"flink\", flow=\"fast\", role=\"$role\", outcome=~\"fast_(.+_)?success\"}[$__range]))",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Hata oranı"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 0.05
+                    },
+                    {
+                      "color": "red",
+                      "value": 0.15
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Başarılı hacim (TRY)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyTRY"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Transfer",
+            "desc": true
+          }
+        ],
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "bank": "Banka",
+              "Value #A": "Transfer",
+              "Value #B": "Başarılı",
+              "Value #C": "Başarısız",
+              "Value #D": "Hata oranı",
+              "Value #E": "Başarılı hacim (TRY)"
+            }
+          }
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 39,
+        "w": 14,
+        "h": 10
+      },
+      "id": 22
+    },
+    {
+      "type": "bargauge",
+      "title": "En yüksek hata oranı (ilk 5 banka)",
+      "description": "Seçili aralıkta başarısız transfer oranı en yüksek bankalar.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "topk(5, round(sum by (bank) (increase(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"$role\", outcome=~\"fast_(.+_)?failed\"}[$__range]))) / clamp_min(round(sum by (bank) (increase(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"$role\"}[$__range]))), 1))",
+          "legendFormat": "{{bank}}",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.05
+              },
+              {
+                "color": "red",
+                "value": 0.15
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "valueMode": "color",
+        "namePlacement": "auto",
+        "sizing": "auto"
+      },
+      "gridPos": {
+        "x": 14,
+        "y": 39,
+        "w": 10,
+        "h": 10
+      },
+      "id": 23
+    },
+    {
+      "type": "row",
+      "title": "Başarısızlık nedenleri",
+      "id": 24,
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 49,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "piechart",
+      "title": "Nedenlere göre başarısız transfer",
+      "description": "Başarısız transferlerin nedenlere dağılımı.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "round(sum by (reason) (increase(reconciler_failures_total{impl=\"flink\", flow=\"fast\"}[$__range])))",
+          "legendFormat": "{{reason}}",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "pieType": "donut",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 50,
+        "w": 8,
+        "h": 8
+      },
+      "id": 25
+    },
+    {
+      "type": "timeseries",
+      "title": "Nedenlere göre dakikada başarısız işlem",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum by (reason) (rate(reconciler_failures_total{impl=\"flink\", flow=\"fast\"}[$__rate_interval])) * 60",
+          "legendFormat": "{{reason}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 50,
+        "w": 16,
+        "h": 8
+      },
+      "id": 26
+    },
+    {
+      "type": "row",
+      "title": "Uyarılar",
+      "id": 27,
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 58,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "alertlist",
+      "title": "FAST iş uyarıları",
+      "description": "Bu akış için tetiklenen veya bekleyen iş uyarıları (hacim, başarı oranı, takılan transferler).",
+      "options": {
+        "viewMode": "list",
+        "groupMode": "default",
+        "maxItems": 30,
+        "sortOrder": 3,
+        "dashboardAlerts": false,
+        "alertName": "",
+        "showInstances": true,
+        "alertInstanceLabelFilter": "{flow=\"fast\", domain=\"transfer\"}",
+        "stateFilter": {
+          "firing": true,
+          "pending": true,
+          "noData": false,
+          "normal": false,
+          "error": true
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 59,
+        "w": 24,
+        "h": 6
+      },
+      "id": 28
+    }
+  ]
+}

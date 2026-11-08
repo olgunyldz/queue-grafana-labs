@@ -1,0 +1,1396 @@
+{
+  "uid": "fast-developer",
+  "title": "FAST · Geliştirici",
+  "description": "FAST event akışı: API, Kafka topic'leri, reconciler iç durumu, Flink throughput ve hata logları.",
+  "tags": [
+    "fast",
+    "transfer-team",
+    "developer"
+  ],
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "links": [
+    {
+      "title": "FAST panoları",
+      "type": "dashboards",
+      "tags": [
+        "fast"
+      ],
+      "asDropdown": true,
+      "includeVars": false,
+      "keepTime": true,
+      "icon": "external link"
+    },
+    {
+      "title": "Tüm akış panoları",
+      "type": "dashboards",
+      "tags": [
+        "transfer-team"
+      ],
+      "asDropdown": true,
+      "includeVars": false,
+      "keepTime": true,
+      "icon": "external link"
+    },
+    {
+      "title": "Platform panoları",
+      "type": "dashboards",
+      "tags": [
+        "platform"
+      ],
+      "asDropdown": true,
+      "includeVars": false,
+      "keepTime": true,
+      "icon": "external link"
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "text",
+      "title": "",
+      "options": {
+        "mode": "markdown",
+        "content": "### FAST · Geliştirici panosu\nAkış: **API** (`/events/fast/...`) → **Kafka** (`fast_*` topic'leri) → **Flink reconciler** (`flink-fast-reconciler`, `transaction_id` ile eşleştirme) → `fast_transfer_matched` / `fast_transfer_unmatched`."
+      },
+      "transparent": true,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "id": 1
+    },
+    {
+      "type": "row",
+      "title": "API (mock-producer)",
+      "id": 2,
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Endpoint başına istek / s",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum by (endpoint) (rate(producer_http_requests_total{job=\"mock-producer\", endpoint=~\"/events/fast/.*\"}[$__rate_interval]))",
+          "legendFormat": "{{endpoint}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 8,
+        "h": 8
+      },
+      "id": 3
+    },
+    {
+      "type": "timeseries",
+      "title": "Gecikme p95 / p99",
+      "description": "HTTP isteğinin süresi (Kafka istemci kuyruğuna yazma dahil).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, endpoint) (rate(producer_http_request_duration_seconds_bucket{job=\"mock-producer\", endpoint=~\"/events/fast/.*\"}[$__rate_interval])))",
+          "legendFormat": "p95 {{endpoint}}",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "B",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(producer_http_request_duration_seconds_bucket{job=\"mock-producer\", endpoint=~\"/events/fast/.*\"}[$__rate_interval])))",
+          "legendFormat": "p99 (tümü)",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 4,
+        "w": 8,
+        "h": 8
+      },
+      "id": 4
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP hata kodları ve producer hataları / s",
+      "description": "4xx: geçersiz istek (validation / invalid_json). 5xx ve producer `kafka*` hataları: Kafka tarafı.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum by (code) (rate(producer_http_requests_total{job=\"mock-producer\", endpoint=~\"/events/fast/.*\", code=~\"[45]..\"}[$__rate_interval]))",
+          "legendFormat": "HTTP {{code}}",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "B",
+          "expr": "sum by (reason) (rate(producer_errors_total{job=\"mock-producer\", endpoint=~\"/events/fast/.*\"}[$__rate_interval]))",
+          "legendFormat": "producer: {{reason}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 4,
+        "w": 8,
+        "h": 8
+      },
+      "id": 5
+    },
+    {
+      "type": "row",
+      "title": "Kafka",
+      "id": 6,
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Topic'e yazılan mesaj / s",
+      "description": "Giriş (request/success/failed) ve çıkış (matched/unmatched) topic'leri.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum by (topic) (rate(kafka_topic_partition_current_offset{topic=~\"fast_.*\"}[$__rate_interval]))",
+          "legendFormat": "{{topic}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "id": 7
+    },
+    {
+      "type": "timeseries",
+      "title": "Reconciler lag (mesaj)",
+      "description": "`flink-fast-reconciler` consumer group'unun okunmamış mesajları. Flink offset'leri checkpoint'te (10 s) commit eder.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum by (topic) (kafka_consumergroup_lag{consumergroup=\"flink-fast-reconciler\"})",
+          "legendFormat": "{{topic}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "id": 8
+    },
+    {
+      "type": "timeseries",
+      "title": "Mock consumer: endpoint başına event / s",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum by (endpoint) (rate(consumer_events_total{endpoint=~\"/events/fast/.*\"}[$__rate_interval]))",
+          "legendFormat": "{{endpoint}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 12,
+        "h": 7
+      },
+      "id": 9
+    },
+    {
+      "type": "timeseries",
+      "title": "Mock consumer: Kafka yazma → tüketme gecikmesi p95",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, endpoint) (rate(consumer_event_latency_seconds_bucket{endpoint=~\"/events/fast/.*\"}[$__rate_interval])))",
+          "legendFormat": "{{endpoint}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 21,
+        "w": 12,
+        "h": 7
+      },
+      "id": 10
+    },
+    {
+      "type": "row",
+      "title": "Reconciler iç durumu",
+      "id": 11,
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Eşleşen ve süresi dolan / dk",
+      "description": "unmatched: TTL (10 dk) içinde karşı tarafı gelmeyen kayıtlar.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum (rate(reconciler_transfers_total{impl=\"flink\", flow=\"fast\", role=\"sender\"}[$__rate_interval])) * 60",
+          "legendFormat": "eşleşen",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "B",
+          "expr": "sum by (kind) (rate(reconciler_unmatched_total{impl=\"flink\", flow=\"fast\"}[$__rate_interval])) * 60",
+          "legendFormat": "unmatched: {{kind}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 8,
+        "h": 8
+      },
+      "id": 12
+    },
+    {
+      "type": "timeseries",
+      "title": "State'teki kayıtlar",
+      "description": "Checkpoint'ten geri yüklenir; restart sonrası sıfırlanmaz.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum(reconciler_pending{impl=\"flink\", flow=\"fast\"})",
+          "legendFormat": "pending (sonuç bekleyen istek)",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "B",
+          "expr": "sum(reconciler_stuck{impl=\"flink\", flow=\"fast\"})",
+          "legendFormat": "stuck (> 30 s)",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "C",
+          "expr": "sum(reconciler_orphan_outcomes{impl=\"flink\", flow=\"fast\"})",
+          "legendFormat": "orphan (isteği gelmemiş sonuç)",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 29,
+        "w": 8,
+        "h": 8
+      },
+      "id": 13
+    },
+    {
+      "type": "timeseries",
+      "title": "Duplicate ve geçersiz event / dk",
+      "description": "duplicate: aynı transaction_id ile tekrar gelen event (eşleşmeden önce veya sonraki 10 dk içinde).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum by (event) (rate(reconciler_duplicates_total{impl=\"flink\", flow=\"fast\"}[$__rate_interval])) * 60",
+          "legendFormat": "duplicate: {{event}}",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "B",
+          "expr": "sum(rate(reconciler_invalid_events_total{impl=\"flink\", flow=\"fast\"}[$__rate_interval])) * 60",
+          "legendFormat": "geçersiz JSON / alan eksik",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 29,
+        "w": 8,
+        "h": 8
+      },
+      "id": 14
+    },
+    {
+      "type": "heatmap",
+      "title": "Tamamlanma süresi dağılımı",
+      "description": "İstek → sonuç süresinin histogramı (Kafka kayıt zaman damgalarından).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum by (le) (increase(reconciler_completion_seconds_bucket{impl=\"flink\", flow=\"fast\"}[$__rate_interval]))",
+          "legendFormat": "{{le}}",
+          "range": true,
+          "instant": false,
+          "format": "heatmap"
+        }
+      ],
+      "options": {
+        "calculate": false,
+        "yAxis": {
+          "unit": "s",
+          "axisPlacement": "left"
+        },
+        "color": {
+          "mode": "scheme",
+          "scheme": "Oranges",
+          "steps": 64
+        },
+        "cellGap": 1,
+        "tooltip": {
+          "mode": "single",
+          "yHistogram": true
+        },
+        "legend": {
+          "show": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      },
+      "id": 15
+    },
+    {
+      "type": "timeseries",
+      "title": "Sonuç türüne göre tamamlanma süresi p95",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, outcome) (rate(reconciler_completion_seconds_bucket{impl=\"flink\", flow=\"fast\"}[5m])))",
+          "legendFormat": "{{outcome}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      },
+      "id": 16
+    },
+    {
+      "type": "row",
+      "title": "Flink job",
+      "id": 17,
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 45,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Task başına kayıt / s (giriş)",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum by (task_name) (flink_taskmanager_job_task_numRecordsInPerSecond{flow=\"fast\"})",
+          "legendFormat": "{{task_name}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 46,
+        "w": 12,
+        "h": 7
+      },
+      "id": 18
+    },
+    {
+      "type": "timeseries",
+      "title": "Kafka sink: gönderilen ve hatalı kayıt / s",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum(rate(flink_taskmanager_job_task_operator_numRecordsSend{flow=\"fast\"}[$__rate_interval]))",
+          "legendFormat": "gönderilen",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "B",
+          "expr": "sum(rate(flink_taskmanager_job_task_operator_numRecordsSendErrors{flow=\"fast\"}[$__rate_interval]))",
+          "legendFormat": "hata",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 46,
+        "w": 12,
+        "h": 7
+      },
+      "id": 19
+    },
+    {
+      "type": "row",
+      "title": "Loglar",
+      "id": 20,
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 53,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Hata / uyarı log sayısı",
+      "description": "",
+      "datasource": {
+        "type": "loki",
+        "uid": "P8E80F9AEF21F6940"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "P8E80F9AEF21F6940"
+          },
+          "refId": "A",
+          "expr": "sum by (container) (count_over_time({container=~\".*flink-fast-.*\"} |~ \"(?i)(error|exception|warn)\" !~ \"Name collision\" [1m]))",
+          "legendFormat": "{{container}}",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 2,
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 54,
+        "w": 24,
+        "h": 6
+      },
+      "id": 21
+    },
+    {
+      "type": "logs",
+      "title": "Flink (fast) hata ve uyarıları",
+      "description": "",
+      "datasource": {
+        "type": "loki",
+        "uid": "P8E80F9AEF21F6940"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "P8E80F9AEF21F6940"
+          },
+          "refId": "A",
+          "expr": "{container=~\".*flink-fast-.*\"} |~ \"(?i)(error|exception|warn)\" !~ \"Name collision\"",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 60,
+        "w": 12,
+        "h": 10
+      },
+      "id": 22
+    },
+    {
+      "type": "logs",
+      "title": "API / consumer logları (fast)",
+      "description": "",
+      "datasource": {
+        "type": "loki",
+        "uid": "P8E80F9AEF21F6940"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "P8E80F9AEF21F6940"
+          },
+          "refId": "A",
+          "expr": "{container=~\".*mock-(producer|consumer).*\"} |~ \"(?i)fast\" |~ \"(?i)(error|warn|fail)\"",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 60,
+        "w": 12,
+        "h": 10
+      },
+      "id": 23
+    }
+  ]
+}

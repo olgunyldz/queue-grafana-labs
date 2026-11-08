@@ -1,0 +1,73 @@
+# Request <-> outcome reconciliation per consumer group and flow (fast | havale | eft).
+#
+# Counts come from the consumer group's committed offsets (kafka-exporter), so they are durable
+# across consumer restarts and are scoped to one group. The flow label is taken from the topic
+# name (<flow>_..._request / _success / _failed):
+#   sent    = request messages the group consumed in the last 5 minutes
+#   outcome = success + failed messages consumed in the last 5 minutes
+#   mismatch ratio = |sent - outcome| / sent
+#
+# A ratio above 0.10 means more than 10% of the requests have no outcome (or there are outcomes
+# without a request). The Grafana alert "Transfer request/outcome mismatch" fires when this stays
+# above 10% for 5 minutes.
+groups:
+  - name: transfer-reconciliation
+    interval: 15s
+    rules:
+      - record: transfer:sent:increase5m
+        expr: |
+          sum by (consumergroup, flow) (
+            label_replace(
+              increase(kafka_consumergroup_current_offset{topic=~"(fast|havale|eft)_(.+_)?request"}[5m]),
+              "flow", "$1", "topic", "(fast|havale|eft)_.*")
+          )
+
+      - record: transfer:success:increase5m
+        expr: |
+          sum by (consumergroup, flow) (
+            label_replace(
+              increase(kafka_consumergroup_current_offset{topic=~"(fast|havale|eft)_(.+_)?success"}[5m]),
+              "flow", "$1", "topic", "(fast|havale|eft)_.*")
+          )
+
+      - record: transfer:failed:increase5m
+        expr: |
+          sum by (consumergroup, flow) (
+            label_replace(
+              increase(kafka_consumergroup_current_offset{topic=~"(fast|havale|eft)_(.+_)?failed"}[5m]),
+              "flow", "$1", "topic", "(fast|havale|eft)_.*")
+          )
+
+      - record: transfer:outcome:increase5m
+        expr: |
+          transfer:success:increase5m + on (consumergroup, flow) transfer:failed:increase5m
+          or transfer:success:increase5m
+          or transfer:failed:increase5m
+
+      # Only evaluated when there is enough traffic (>= 20 events in 5m), so a single unanswered
+      # request at low volume does not count as a 100% mismatch.
+      # When sent = 0 but outcomes exist, the ratio is large (outcome / 1).
+      - record: transfer:outcome_mismatch:ratio5m
+        expr: |
+          (
+            abs(transfer:sent:increase5m - on (consumergroup, flow) transfer:outcome:increase5m)
+            / on (consumergroup, flow) clamp_min(transfer:sent:increase5m, 1)
+          )
+          and on (consumergroup, flow)
+          (transfer:sent:increase5m + on (consumergroup, flow) transfer:outcome:increase5m) >= 20
+
+      # failed / success over the last 5 minutes; only when >= 20 outcomes.
+      - record: transfer:failed_success:ratio5m
+        expr: |
+          (transfer:failed:increase5m / on (consumergroup, flow) clamp_min(transfer:success:increase5m, 1))
+          and on (consumergroup, flow)
+          transfer:outcome:increase5m >= 20
+
+      # ---- Business hours (Europe/Istanbul, UTC+3, no DST) ---------------
+      # 1 between 09:00 and 18:00 Istanbul time, 0 otherwise.
+      # Change 9 / 18 here to move the window used by the low-volume alerts.
+      - record: transfer:business_hours
+        expr: |
+          (hour(vector(time() + 3 * 3600)) >= bool 9)
+          *
+          (hour(vector(time() + 3 * 3600)) < bool 18)
