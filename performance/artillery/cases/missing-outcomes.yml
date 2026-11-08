@@ -20,13 +20,13 @@ scenarios:
     flow:
       - function: newTransfer
       - post:
-          url: /events/fast_send
+          url: /events/fast/incoming/request
           beforeRequest: fastBody
           expect:
             - statusCode: 202
       - think: 0.2
       - post:
-          url: /events/fast_send_success
+          url: /events/fast/incoming/success
           beforeRequest: fastBody
           expect:
             - statusCode: 202
@@ -36,13 +36,13 @@ scenarios:
     flow:
       - function: newTransfer
       - post:
-          url: /events/fast_send
+          url: /events/fast/incoming/request
           beforeRequest: fastBody
           expect:
             - statusCode: 202
       - think: 0.2
       - post:
-          url: /events/fast_send_failed
+          url: /events/fast/incoming/failed
           beforeRequest: fastBody
           expect:
             - statusCode: 202
@@ -53,7 +53,7 @@ scenarios:
     flow:
       - function: newTransfer
       - post:
-          url: /events/fast_send
+          url: /events/fast/incoming/request
           beforeRequest: fastBody
           expect:
             - statusCode: 202

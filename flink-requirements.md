@@ -7,7 +7,7 @@ Apache Flink, mevcut [reconciler](./reconciler/) servisine alternatif olarak ayr
 Yeni uygulama ayrı bir klasörde oluşturulmalıdır:
 
 ```text
-flink-reconciler/
+flink-fast-reconciler/
 ```
 
 ## 2. Kafka giriş ve çıkış sözleşmesi

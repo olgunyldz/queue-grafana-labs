@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
-    <RootNamespace>FastTransfer.Producer</RootNamespace>
-    <AssemblyName>FastTransfer.Producer</AssemblyName>
+    <RootNamespace>MockProducer</RootNamespace>
+    <AssemblyName>MockProducer</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
@@ -10,6 +10,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../FastTransfer.Shared/FastTransfer.Shared.csproj" />
+    <ProjectReference Include="../Shared/Shared.csproj" />
   </ItemGroup>
 </Project>

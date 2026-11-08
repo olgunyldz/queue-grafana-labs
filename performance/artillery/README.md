@@ -61,8 +61,8 @@ npm run test:all
 
 Test sırasında http://localhost:3000 adresindeki dashboard'larda şunları izle:
 
-- `FAST / FAST Operations`: transfer sayıları, başarı oranı, alert eşikleri, tamamlanma süresi, bankalar
-- `FAST / FAST Services`: replica başına istek ve tüketim, API süreleri, hatalar ve loglar
-- `Kafka / Kafka Consumer Groups & Broker`: `fast_send` backlog'u (lag), partition'lar ve broker
+- `FAST / FAST · İş Birimi`: transfer sayıları, başarı oranı, tamamlanma süresi, bankalar (Havale ve EFT için kendi klasörleri)
+- `FAST / FAST · Geliştirici` ve `Platform / Platform · Servisler`: endpoint ve replika başına istek ve tüketim, API süreleri, hatalar ve loglar
+- `Platform / Platform · Kafka`: request topic'lerindeki backlog (lag), partition'lar ve broker
 
 Artillery'nin `http.codes.202`, `http.response_time`, `http.request_rate` ve hata metrikleri JSON raporunda bulunur.

@@ -1,13 +1,13 @@
-# Build context: ./dotnet  (docker build -f FastTransfer.Producer/Dockerfile .)
+# Build context: ./dotnet  (docker build -f MockProducer/Dockerfile .)
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY Directory.Build.props ./
-COPY FastTransfer.Shared/FastTransfer.Shared.csproj FastTransfer.Shared/
-COPY FastTransfer.Producer/FastTransfer.Producer.csproj FastTransfer.Producer/
-RUN dotnet restore FastTransfer.Producer/FastTransfer.Producer.csproj
-COPY FastTransfer.Shared/ FastTransfer.Shared/
-COPY FastTransfer.Producer/ FastTransfer.Producer/
-RUN dotnet publish FastTransfer.Producer/FastTransfer.Producer.csproj -c Release -o /out --no-restore
+COPY Shared/Shared.csproj Shared/
+COPY MockProducer/MockProducer.csproj MockProducer/
+RUN dotnet restore MockProducer/MockProducer.csproj
+COPY Shared/ Shared/
+COPY MockProducer/ MockProducer/
+RUN dotnet publish MockProducer/MockProducer.csproj -c Release -o /out --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
@@ -21,4 +21,4 @@ ENV DOTNET_gcServer=0 \
     Logging__Console__FormatterOptions__TimestampFormat="yyyy/MM/dd HH:mm:ss " \
     Logging__LogLevel__Microsoft.AspNetCore=Warning
 EXPOSE 8080
-ENTRYPOINT ["dotnet", "FastTransfer.Producer.dll"]
+ENTRYPOINT ["dotnet", "MockProducer.dll"]

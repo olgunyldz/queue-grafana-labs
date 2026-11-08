@@ -21,14 +21,14 @@ scenarios:
     weight: 9
     flow:
       - function: newTransfer
-      - post: { url: /events/fast_send, beforeRequest: fastBody, expect: [{ statusCode: 202 }] }
+      - post: { url: /events/fast/incoming/request, beforeRequest: fastBody, expect: [{ statusCode: 202 }] }
       - think: 0.2
-      - post: { url: /events/fast_send_success, beforeRequest: fastBody, expect: [{ statusCode: 202 }] }
+      - post: { url: /events/fast/incoming/success, beforeRequest: fastBody, expect: [{ statusCode: 202 }] }
 
   - name: send-then-failed
     weight: 1
     flow:
       - function: newTransfer
-      - post: { url: /events/fast_send, beforeRequest: fastBody, expect: [{ statusCode: 202 }] }
+      - post: { url: /events/fast/incoming/request, beforeRequest: fastBody, expect: [{ statusCode: 202 }] }
       - think: 0.2
-      - post: { url: /events/fast_send_failed, beforeRequest: fastBody, expect: [{ statusCode: 202 }] }
+      - post: { url: /events/fast/incoming/failed, beforeRequest: fastBody, expect: [{ statusCode: 202 }] }

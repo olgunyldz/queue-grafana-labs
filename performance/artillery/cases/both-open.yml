@@ -1,53 +1,53 @@
-# Normal FAST flow: producer and consumer are both up.
-# Every transfer sends fast_send, then its outcome (90% success, 10% failed).
+# Mixed high-load test for all FAST, Havale and EFT request/result endpoints.
 config:
   target: http://127.0.0.1:8080
   processor: ../processors/fast.cjs
   plugins:
     expect: {}
   phases:
-    - name: warmup
-      duration: 15
-      arrivalRate: 2
     - name: ramp-up
       duration: 30
-      arrivalRate: 5
-      rampTo: 40
-    - name: steady-state
-      duration: 60
-      arrivalRate: 40
+      arrivalRate: 20
+      rampTo: 100
+    - name: high-load
+      duration: 300
+      arrivalRate: 100
   http:
     timeout: 10
 
 scenarios:
-  - name: fast-send-success
-    weight: 9
+  - name: fast-incoming
+    weight: 20
     flow:
       - function: newTransfer
-      - post:
-          url: /events/fast_send
-          beforeRequest: fastBody
-          expect:
-            - statusCode: 202
-      - think: 0.2
-      - post:
-          url: /events/fast_send_success
-          beforeRequest: fastBody
-          expect:
-            - statusCode: 202
-
-  - name: fast-send-failed
-    weight: 1
+      - post: { url: /events/fast/incoming/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 0.05
+      - post: { url: /events/fast/incoming/success, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+  - name: fast-outgoing
+    weight: 20
     flow:
       - function: newTransfer
-      - post:
-          url: /events/fast_send
-          beforeRequest: fastBody
-          expect:
-            - statusCode: 202
-      - think: 0.2
-      - post:
-          url: /events/fast_send_failed
-          beforeRequest: fastBody
-          expect:
-            - statusCode: 202
+      - post: { url: /events/fast/outgoing/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 0.05
+      - post: { url: /events/fast/outgoing/failed, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+  - name: havale
+    weight: 20
+    flow:
+      - function: newTransfer
+      - post: { url: /events/havale/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 0.05
+      - post: { url: /events/havale/success, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+  - name: eft-incoming
+    weight: 20
+    flow:
+      - function: newTransfer
+      - post: { url: /events/eft/incoming/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 0.05
+      - post: { url: /events/eft/incoming/failed, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+  - name: eft-outgoing
+    weight: 20
+    flow:
+      - function: newTransfer
+      - post: { url: /events/eft/outgoing/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 0.05
+      - post: { url: /events/eft/outgoing/success, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }

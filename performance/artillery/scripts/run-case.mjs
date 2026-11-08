@@ -9,6 +9,10 @@ const cases = {
   'both-open': {
     file: 'cases/both-open.yml',
   },
+  // Mixed high-load test covering FAST, Havale and EFT endpoints.
+  'mixed-high-load': {
+    file: 'cases/mixed-high-load.yml',
+  },
   // Consumer stopped, only fast_send is sent: the fast_send backlog builds up.
   'fast-send-backlog': {
     file: 'cases/fast-send-backlog.yml',
@@ -37,6 +41,10 @@ const cases = {
   'consumer-only': {
     file: 'cases/producer-closed-consumer-open.yml',
     target: 'consumer',
+  },
+  // Contract smoke test for FAST/EFT directional and Havale endpoints.
+  'directional-endpoints': {
+    file: 'cases/directional-endpoints.yml',
   },
 };
 
