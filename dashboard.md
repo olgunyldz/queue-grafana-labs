@@ -177,7 +177,7 @@ Varsayılan zaman aralığı son 1 saat, yenileme 30 saniyedir. "Seçili aralık
 
 | Bölüm | Paneller |
 |---|---|
-| **Replikalar** | Producer / consumer replika sayısı, API 5xx oranı ve p95, consumer hataları, consumer group üyeleri |
+| **Replikalar** | Producer / consumer replika sayısı, API 5xx oranı ve p95, consumer hataları, sağlıklı abonelikler (`consumer_subscription_up`, consumer `/healthz` ile aynı kontrol) |
 | **Producer (API)** | Akışa göre istek / s, replika başına istek / s (yük dengeleme), 4xx / 5xx oranı |
 | **Consumer** | Replika ve group başına event / s, replika başına aktif partition, Kafka → consumer gecikmesi |
 | **Runtime (.NET)** | Managed heap, working set, CPU, GC |
@@ -242,7 +242,7 @@ Alarmlar Grafana Alerting ile tanımlıdır. Her alarm **akış başına ayrı b
 | No Flink jobs running / No registered TaskManagers | çalışan job veya TaskManager yok | critical | SRE → Durum; Flink UI |
 | No available task slots | boş slot < 1 (5 dk) | warning | SRE → Boş slot |
 | Job restart spike | 10 dk'da > 3 restart | warning | SRE → Checkpoint ve restart; loglar |
-| Checkpoint failure / duration high | başarısız checkpoint > 0 / süre > 30 s | critical / warning | SRE → Checkpoint. Job başlangıcındaki ilk checkpoint başarısız olabilir; alarm 10 dk pending kalır. |
+| Checkpoint failure / duration high | 10 dk'da başarısız checkpoint > 0 (job'un ilk 11 dakikasında ≥ 2) / süre > 30 s | critical / warning | SRE → Checkpoint. Job başlarken task'lar hazır olmadığından ilk checkpoint başarısız olabilir; bu tek başarısızlık alarm üretmez. |
 | TaskManager CPU / heap high | > %85 (10 dk) | warning | SRE → Kaynaklar |
 | Operator backpressure high | > %60 (5 dk) | warning | SRE → Backpressure; Platform · Flink |
 | Kafka consumer lag high | > 10.000 mesaj (10 dk) | warning | SRE → Consumer lag; Platform · Kafka |
@@ -282,8 +282,17 @@ Mesai saatleri `rules/transfers.yml` içindeki `transfer:business_hours` kuralı
 2. **Geliştirici** (`FAST · Geliştirici`): bir event'in yolculuğu — API → Kafka topic'leri → reconciler → çıktı. State'teki kayıtlar ve duplicate paneli eşleştirme mantığını anlatır; loglar kök nedene götürür.
 3. **SRE** (`FAST · SRE`): Durum satırı ve SLO'lar. "İş kaynaklı başarısızlık SLO ihlali değildir" ayrımını vurgulayın.
 4. **Platform** (`Platform · Flink`): üç cluster yan yana; bir akışın cluster'ı durursa diğerlerinin etkilenmediğini göstermek için `docker compose stop flink-havale-taskmanager` → Havale kırmızıya döner, FAST ve EFT çalışmaya devam eder → `docker compose start flink-havale-taskmanager`.
+5. **Dayanıklılık** (isteğe bağlı): `docker compose restart flink-fast-jobmanager` → job son checkpoint'ten devam eder; `FAST · Geliştirici` → State'teki kayıtlar restart öncesiyle aynı kalır.
 
-Demo trafiği için Artillery case'leri (`mixed-high-load`, `directional-endpoints`) veya kendi yük script'iniz kullanılabilir. Gösterilecek kırmızı / sarı değerler için trafikte bir miktar başarısız ve sonuçsuz (sonuç event'i gönderilmeyen) istek bulunmalıdır.
+Demo trafiği için [performance/demo-traffic/traffic.py](./performance/demo-traffic/traffic.py) (yalnızca Python standart kütüphanesi) kullanılır. Varsayılan ayar 30 dakika boyunca saniyede 15 transfer gönderir; transferlerin %8'i başarısız, %2'si sonuçsuz biter ve bir banka (Papara) daha sık hata verir, böylece panolardaki sarı / kırmızı değerler ve banka panelleri dolu görünür. Demodan 15–20 dakika önce başlatın:
+
+```powershell
+python performance/demo-traffic/traffic.py                                    # 30 dk, 15/s, tüm akışlar
+python performance/demo-traffic/traffic.py --minutes 10 --rate 30 --flows fast,eft
+python performance/demo-traffic/traffic.py --failure-rate 0.01 --missing-rate 0 # "sağlıklı" görünüm
+```
+
+Artillery case'leri (`mixed-high-load`, `directional-endpoints`) yük ve alarm testleri içindir.
 
 ---
 
@@ -354,6 +363,8 @@ Uygulamanın stdout'a yazması yeterlidir; Alloy tüm container'ları `container
 - **`increase()` tahminidir.** Seçili aralık başında ve sonunda dış değerleme yaptığı için sayılar küsuratlı çıkabilir; adet panellerinde `round()` kullanılır. Kesin sayı gerektiğinde çıktı topic'leri esas alınır.
 - **Reconciler sayaçları "yan etki"dir.** Çıktı topic'leri exactly-once ile doğrudur; Flink bir checkpoint'ten yeniden başladığında son checkpoint'ten sonraki kayıtlar tekrar işlendiği için sayaçlar bir miktar fazla artabilir.
 - **Eşleşmiş ID'ler 10 dakika state'te tutulur** (geç gelen duplicate'leri yakalamak için). Yüksek hacimde checkpoint boyutu buna göre büyür; SRE → Checkpoint boyutu panelinden izlenir.
-- **İlk checkpoint** job başlarken task'lar hazır olmadığından başarısız olabilir; "Flink checkpoint failure" alarmı her başlangıçtan sonra 10 dakika pending kalır.
+- **İlk checkpoint** job başlarken task'lar hazır olmadığından başarısız olabilir; alarm bu tek başarısızlığı yok sayar (ilk 11 dakikada en az 2 başarısızlık gerekir).
+- **JobManager restart'ı** job'u en son tamamlanmış checkpoint'ten başlatır ([start-job.sh](./flink/reconciler/docker/start-job.sh)). Son checkpoint'ten sonra işlenen kayıtlar Kafka'dan tekrar okunur (çıktı exactly-once olduğu için topic'lerde tekrar oluşmaz, sayaçlar biraz fazla artabilir). State uyumsuz bir kod değişikliğinde `RESTORE_FROM_CHECKPOINT=false` ile boş state'le başlatılır.
+- **Consumer `/healthz`** Kafka duraklatılmış (bağlantı askıda) durumda erişimsizliği librdkafka zaman aşımından sonra (~45 s) fark eder; container tamamen kapanırsa hemen fark eder.
 - **Geçen hafta çizgileri** bir haftalık veri birikene kadar boştur. Prometheus verisi varsayılan olarak 15 gün tutulur.
 - **Grafana dosya değişikliğini algılamayabilir** (Windows bind mount). Pano veya alarm dosyası değiştiğinde `docker compose restart grafana`.

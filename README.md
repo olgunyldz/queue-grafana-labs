@@ -226,6 +226,8 @@ Flink ortam değişkenleri (JobManager servisine verilir; application mode’da 
 
 Süreler `500ms`, `30s`, `10m`, `1h` biçiminde verilir; geçersiz bir değerde job açık bir hata mesajıyla başlamaz.
 
+**Restart ve state:** JobManager’ın giriş noktası [start-job.sh](./flink/reconciler/docker/start-job.sh) job’u akışın en son tamamlanmış checkpoint’inden (`volumes/flink-checkpoints/<flow>/<job-id>/chk-N`) başlatır; JobManager restart’ı veya `docker compose up` sonrasında bekleyen transferler kaybolmaz. Eski çalıştırmaların checkpoint klasörleri başlangıçta silinir. Boş state’le başlatmak için JobManager’a `RESTORE_FROM_CHECKPOINT=false` verin. TaskManager veya Kafka kesintilerinde Flink job’u kendi içinde son checkpoint’ten yeniden başlatır.
+
 Flink job’unu kontrol etmek için:
 
 ```powershell
@@ -254,6 +256,8 @@ Bu 9 pano ve Platform · Servisler / Flink panoları [generate_team_dashboards.p
 python observability/grafana/generate_team_dashboards.py
 docker compose restart grafana   # Windows bind mount’ta dosya değişikliği otomatik algılanmayabilir
 ```
+
+Panoları demo için doldurmak (başarısız ve sonuçsuz işlemler dahil): `python performance/demo-traffic/traffic.py` (ayrıntı: [dashboard.md → Demo akışı](./dashboard.md#5-demo-akışı)).
 
 ### Platform panoları
 
