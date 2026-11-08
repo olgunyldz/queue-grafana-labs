@@ -1,5 +1,5 @@
-# Alert test: 30 transfers/s for 7 minutes (~9000 fast_send and ~9000 outcomes / 5m).
-# > 6000 / 5m -> "FAST send volume high" and "FAST outcome volume high"
+# Alert test: 30 transfers/s for 7 minutes (~9000 requests and ~9000 outcomes / 5m).
+# > 6000 / 5m -> "Transfer request volume high" and "Transfer outcome volume high" (flow fast)
 config:
   target: http://127.0.0.1:8080
   processor: ../processors/fast.cjs

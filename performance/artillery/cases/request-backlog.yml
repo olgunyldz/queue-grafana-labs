@@ -1,5 +1,6 @@
-# fast_send backlog: consumer is stopped, only fast_send is sent.
-# Lag on the fast_send topic grows; it drains once the consumer starts again.
+# Request backlog: only FAST incoming requests are sent (10 -> 100/s). Stop the FAST reconciler
+# (docker compose stop flink-fast-taskmanager) first: lag on fast_incoming_request grows and drains
+# once it starts again; stuck transfers grow after 30 s.
 config:
   target: http://127.0.0.1:8080
   processor: ../processors/fast.cjs
@@ -9,7 +10,7 @@ config:
     - name: warmup
       duration: 15
       arrivalRate: 2
-    - name: fast-send-burst
+    - name: request-burst
       duration: 60
       arrivalRate: 10
       rampTo: 100
@@ -17,7 +18,7 @@ config:
     timeout: 10
 
 scenarios:
-  - name: fast-send-only
+  - name: request-only
     flow:
       - function: newTransfer
       - post:

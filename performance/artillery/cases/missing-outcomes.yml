@@ -1,6 +1,6 @@
-# Alert test: fast_send is sent for every transfer, but ~25% of the transfers
-# never get an outcome (no fast_send_success / fast_send_failed).
-# Runs 8 minutes so the "FAST send/outcome mismatch" alert
+# Alert test: a request is sent for every transfer, but ~25% of the transfers
+# never get an outcome (no success / failed event).
+# Runs 8 minutes so the "Transfer request/outcome mismatch" alert (flow fast)
 # (> 10% difference for 5 minutes) goes pending, then firing.
 config:
   target: http://127.0.0.1:8080

@@ -52,7 +52,7 @@ function trIban(bankCode) {
 }
 
 // Flow step: create a new transfer and keep it in the virtual user's context so
-// fast_send and its outcome event share the same transaction_id.
+// the request and its outcome event share the same transaction_id.
 function newTransfer(context, events, done) {
   const senderBank = pickBank().code;
   const receiverBank = pickBank().code;
@@ -71,11 +71,10 @@ function newTransfer(context, events, done) {
 }
 
 // beforeRequest hook: build the body from the current transfer; the event name
-// is taken from the URL (/events/<event>).
+// is taken from the URL (/events/<flow>/<direction>/<event>).
 function fastBody(requestParams, context, ee, next) {
-  const event = requestParams.url.split('/').pop();
   const body = { ...context.vars.transfer, sent_at: new Date().toISOString() };
-  if (requestParams.url?.includes('/failed') || event === 'fast_send_failed') {
+  if (requestParams.url?.includes('/failed')) {
     body.failure_reason = pick(FAILURE_REASONS);
   }
   requestParams.json = body;

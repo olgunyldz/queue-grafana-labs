@@ -1,5 +1,5 @@
-# No fast_send: producer and consumer are up, but only outcome events
-# (fast_send_success / fast_send_failed) are sent. The fast_send topic stays flat.
+# No request: only FAST incoming outcome events (success / failed) are sent. The request topic stays
+# flat; the reconciler stores orphan outcomes that expire as outcome_without_send after 10 minutes.
 config:
   target: http://127.0.0.1:8080
   processor: ../processors/fast.cjs
@@ -16,7 +16,7 @@ config:
     timeout: 10
 
 scenarios:
-  - name: success-without-fast-send
+  - name: success-without-request
     weight: 8
     flow:
       - function: newTransfer
@@ -26,7 +26,7 @@ scenarios:
           expect:
             - statusCode: 202
 
-  - name: failed-without-fast-send
+  - name: failed-without-request
     weight: 2
     flow:
       - function: newTransfer

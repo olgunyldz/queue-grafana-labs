@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const artilleryDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const cases = {
-  // Normal flow: fast_send followed by fast_send_success / fast_send_failed.
+  // Normal FAST flow: request followed by success / failed.
   'both-open': {
     file: 'cases/both-open.yml',
   },
@@ -13,15 +13,15 @@ const cases = {
   'mixed-high-load': {
     file: 'cases/mixed-high-load.yml',
   },
-  // Consumer stopped, only fast_send is sent: the fast_send backlog builds up.
-  'fast-send-backlog': {
-    file: 'cases/fast-send-backlog.yml',
+  // Only requests are sent; with the FAST reconciler stopped the request backlog builds up.
+  'request-backlog': {
+    file: 'cases/request-backlog.yml',
   },
-  // No fast_send is sent at all, only the outcome events.
-  'no-fast-send': {
-    file: 'cases/no-fast-send.yml',
+  // No request is sent at all, only the outcome events.
+  'no-request': {
+    file: 'cases/no-request.yml',
   },
-  // Alert test: ~25% of fast_send never get an outcome, for 8 minutes.
+  // Alert test: ~25% of the requests never get an outcome, for 8 minutes.
   'missing-outcomes': {
     file: 'cases/missing-outcomes.yml',
   },
@@ -29,9 +29,9 @@ const cases = {
   'high-failure': {
     file: 'cases/high-failure.yml',
   },
-  // Alert test: 30 transfers/s for 7 minutes (send + outcome volume high).
-  'fast-send-spike': {
-    file: 'cases/fast-send-spike.yml',
+  // Alert test: 30 transfers/s for 7 minutes (request + outcome volume high).
+  'request-spike': {
+    file: 'cases/request-spike.yml',
   },
   // Alert test: ~0.2 transfers/s for 7 minutes (volume low; business hours only).
   'low-volume': {
