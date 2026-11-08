@@ -102,6 +102,7 @@ public sealed class Transfer
 /// <summary>Envelope written to Kafka.</summary>
 public sealed class TransferEvent
 {
+    /// <summary>Event id: a UUIDv7, unique across producer replicas and ordered by creation time.</summary>
     public string Id { get; set; } = "";
     public string Event { get; set; } = "";
     public string TransactionId { get; set; } = "";

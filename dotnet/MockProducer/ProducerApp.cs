@@ -29,8 +29,6 @@ public static class ProducerApp
             Buckets = [.001, .0025, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10],
         });
 
-    static long _sequence;
-
     public static WebApplication Build(string[] args)
     {
         var builder = WebApplication.CreateSlimBuilder(args);
@@ -116,7 +114,9 @@ public static class ProducerApp
 
             var evt = new TransferEvent
             {
-                Id = Interlocked.Increment(ref _sequence).ToString(),
+                // Unique across producer replicas (a per-process counter repeated the same ids on every
+                // replica) and time-ordered (UUIDv7), so ids still sort by creation time.
+                Id = Guid.CreateVersion7().ToString(),
                 Event = name,
                 TransactionId = transfer.TransactionId,
                 Payload = transfer,
