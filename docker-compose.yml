@@ -76,8 +76,10 @@ services:
       kafka:
         condition: service_healthy
 
+  # Official prometheus/jmx_exporter 1.7.0 jar, pinned and checksum-verified (see its Dockerfile).
   kafka-jmx-exporter:
-    image: bitnami/jmx-exporter:latest
+    build: ./observability/kafka-jmx-exporter
+    image: kafka-jmx-exporter:local
     command: [ "5556", "/etc/jmx-exporter/config.yml" ]
     volumes:
       - ./observability/kafka-jmx-exporter/config.yml:/etc/jmx-exporter/config.yml:ro
@@ -89,6 +91,8 @@ services:
     image: danielqsj/kafka-exporter:v1.9.0
     command:
       - --kafka.server=kafka:9092
+      # Protocol version the exporter speaks, not the broker version: Kafka 4.x brokers still accept the
+      # 3.9 protocol (they dropped only pre-2.1 protocols). Verified against the Kafka 4.4 broker here.
       - --kafka.version=3.9.0
       - --topic.filter=^[^_].*
       - --group.filter=.*

@@ -68,7 +68,7 @@ Kafka Streams ve Flink reconciler’ları birbirinin yerine kullanılabilir iki 
 | `flink-eft-jobmanager` | Apache Flink 2.1.3 | EFT cluster’ı; EFT job’unu çalıştırır | `http://localhost:18084` |
 | `flink-<flow>-taskmanager` | Apache Flink 2.1.3 | İlgili akışın task’lerini çalıştırır (4 slot) | Metrics portu `9249` |
 | `kafka-exporter` | kafka-exporter | Consumer group lag ve offset metrikleri | `9308` |
-| `kafka-jmx-exporter` | JMX exporter | Kafka broker metrikleri | `5556` |
+| `kafka-jmx-exporter` | prometheus/jmx_exporter 1.7.0 (resmi jar, checksum ile sabit) | Kafka broker metrikleri | `5556` |
 | `prometheus` | Prometheus | Metrikleri scrape eder ve saklar | `http://localhost:9090` |
 | `loki` | Loki | Logları saklar | `http://localhost:3100` |
 | `alloy` | Grafana Alloy | Docker loglarını Loki’ye gönderir | Internal |
@@ -362,7 +362,7 @@ observability/
   grafana/provisioning/       Datasource, dashboard ve alert provisioning
   loki/                       Loki config
   alloy/                      Alloy config
-  kafka-jmx-exporter/         Kafka JMX exporter config
+  kafka-jmx-exporter/         Kafka JMX exporter image (Dockerfile) ve config
   nginx/                      Producer load balancer config
 
 performance/
