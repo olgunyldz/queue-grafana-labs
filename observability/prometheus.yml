@@ -7,34 +7,28 @@ rule_files:
 
 scrape_configs:
   # Every replica is scraped separately: Docker's DNS returns one A record per replica.
-  - job_name: dotnet-producer
+  - job_name: mock-producer
     dns_sd_configs:
-      - names: [dotnet-producer]
+      - names: [mock-producer]
         type: A
         port: 8080
         refresh_interval: 10s
     relabel_configs:
       - target_label: impl
         replacement: dotnet
-  - job_name: dotnet-consumer
+  - job_name: mock-consumer
     dns_sd_configs:
-      - names: [dotnet-consumer]
+      - names: [mock-consumer]
         type: A
         port: 2114
         refresh_interval: 10s
     relabel_configs:
       - target_label: impl
         replacement: dotnet
-  - job_name: fast-reconciler
-    dns_sd_configs:
-      - names: [fast-reconciler]
-        type: A
-        port: 9400
-        refresh_interval: 10s
-    relabel_configs:
-      - target_label: impl
-        replacement: kstreams
-  - job_name: flink-reconciler
+  # Flink TaskManagers of the session cluster (reconciler operator metrics live here).
+  # flow (fast | havale | eft) is taken from the job name (flink_<flow>_reconciler) of job-level
+  # metrics; TaskManager-wide metrics (CPU, heap) have no flow.
+  - job_name: flink-reconcilers
     dns_sd_configs:
       - names: [flink-taskmanager]
         type: A
@@ -45,58 +39,23 @@ scrape_configs:
         replacement: flink
       - target_label: flink_component
         replacement: taskmanager
-    # Flink's Prometheus reporter embeds MetricGroup dimensions in the
-    # metric name. Normalize them back to the shared FAST metric contract so
-    # the Flink and Kafka Streams dashboards use the same PromQL.
+    # Flink's Prometheus reporter puts the MetricGroup path and the label keys into the metric name,
+    # e.g. flink_taskmanager_job_task_operator_reconciler_outcome_role_bank_code_bank_transfers_total.
+    # Map them back to reconciler_<metric> (the metric contract used by dashboards and alerts).
     metric_relabel_configs:
+      - source_labels: [job_name]
+        regex: flink_(.+)_reconciler
+        target_label: flow
       - source_labels: [__name__]
-        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_outcome_role_bank_code_bank_transfers_total
+        # invalid_events_total is registered by the Kafka source's deserializer (extra "deserializer" scope).
+        regex: flink_taskmanager_job_task_operator_(?:deserializer_)?reconciler_(?:.*_)?(transfers_total|volume_try_total|completion_seconds_bucket|completion_seconds_count|completion_seconds_sum|amount_try_bucket|amount_try_count|amount_try_sum|failures_total|unmatched_total|duplicates_total|invalid_events_total|pending|stuck|orphan_outcomes)
         target_label: __name__
-        replacement: fast_kstreams_reconciler_transfers_total
+        replacement: reconciler_$1
+      # Saga counters, gauges and stage buckets (saga_transitions_total, saga_open_amount_try, ...), same group.
       - source_labels: [__name__]
-        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_outcome_role_bank_code_bank_volume_try_total
+        regex: flink_taskmanager_job_task_operator_reconciler_(?:.*_)?(saga_[a-z_]+)
         target_label: __name__
-        replacement: fast_kstreams_reconciler_volume_try_total
-      - source_labels: [__name__]
-        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_outcome_sender_bank_completion_seconds_(bucket|count|sum)
-        target_label: __name__
-        replacement: fast_kstreams_reconciler_completion_seconds_$1
-      - source_labels: [__name__]
-        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_outcome_sender_bank_le_completion_seconds_bucket
-        target_label: __name__
-        replacement: fast_kstreams_reconciler_completion_seconds_bucket
-      - source_labels: [__name__]
-        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_outcome_amount_try_(count|sum)
-        target_label: __name__
-        replacement: fast_kstreams_reconciler_amount_try_$1
-      - source_labels: [__name__]
-        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_outcome_le_amount_try_bucket
-        target_label: __name__
-        replacement: fast_kstreams_reconciler_amount_try_bucket
-      - source_labels: [__name__]
-        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_reason_failures_total
-        target_label: __name__
-        replacement: fast_kstreams_reconciler_failures_total
-      - source_labels: [__name__]
-        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_.*_unmatched_total
-        target_label: __name__
-        replacement: fast_kstreams_reconciler_unmatched_total
-      - source_labels: [__name__]
-        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_.*_duplicates_total
-        target_label: __name__
-        replacement: fast_kstreams_reconciler_duplicates_total
-      - source_labels: [__name__]
-        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_pending
-        target_label: __name__
-        replacement: fast_kstreams_reconciler_pending
-      - source_labels: [__name__]
-        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_stuck
-        target_label: __name__
-        replacement: fast_kstreams_reconciler_stuck
-      - source_labels: [__name__]
-        regex: flink_taskmanager_job_task_operator_fast_kstreams_reconciler_orphan_outcomes
-        target_label: __name__
-        replacement: fast_kstreams_reconciler_orphan_outcomes
+        replacement: reconciler_$1
       # Flink sanitizes decimal bucket labels (0.05 -> 0_05, +Inf -> _Inf).
       - source_labels: [le]
         regex: '([0-9]+)_([0-9]+)'
@@ -106,6 +65,131 @@ scrape_configs:
         regex: _Inf
         target_label: le
         replacement: +Inf
+      # Flink replaces every non-alphanumeric character of a label value with "_" ("QNB / Enpara.com" ->
+      # "QNB___Enpara_com"). Restore the display names (Turkish spelling of BankResolver.java's banks):
+      # bank from bank_code, sender_bank (completion histogram) from its sanitized form.
+      - source_labels: [bank_code]
+        regex: '00010'
+        target_label: bank
+        replacement: 'Ziraat Bankası'
+      - source_labels: [bank_code]
+        regex: '00012'
+        target_label: bank
+        replacement: 'Halkbank'
+      - source_labels: [bank_code]
+        regex: '00015'
+        target_label: bank
+        replacement: 'Vakıfbank'
+      - source_labels: [bank_code]
+        regex: '00032'
+        target_label: bank
+        replacement: 'TEB'
+      - source_labels: [bank_code]
+        regex: '00046'
+        target_label: bank
+        replacement: 'Akbank'
+      - source_labels: [bank_code]
+        regex: '00062'
+        target_label: bank
+        replacement: 'Garanti BBVA'
+      - source_labels: [bank_code]
+        regex: '00064'
+        target_label: bank
+        replacement: 'İş Bankası'
+      - source_labels: [bank_code]
+        regex: '00067'
+        target_label: bank
+        replacement: 'Yapı Kredi'
+      - source_labels: [bank_code]
+        regex: '00099'
+        target_label: bank
+        replacement: 'ING Bank'
+      - source_labels: [bank_code]
+        regex: '00111'
+        target_label: bank
+        replacement: 'QNB / Enpara.com'
+      - source_labels: [bank_code]
+        regex: '00134'
+        target_label: bank
+        replacement: 'Denizbank'
+      - source_labels: [bank_code]
+        regex: '00203'
+        target_label: bank
+        replacement: 'Albaraka Türk'
+      - source_labels: [bank_code]
+        regex: '00205'
+        target_label: bank
+        replacement: 'Kuveyt Türk'
+      - source_labels: [bank_code]
+        regex: '00206'
+        target_label: bank
+        replacement: 'Türkiye Finans'
+      - source_labels: [bank_code]
+        regex: '00209'
+        target_label: bank
+        replacement: 'Ziraat Katılım'
+      - source_labels: [bank_code]
+        regex: '00210'
+        target_label: bank
+        replacement: 'Vakıf Katılım'
+      - source_labels: [bank_code]
+        regex: '00231'
+        target_label: bank
+        replacement: 'Papara'
+      - source_labels: [bank_code]
+        regex: '00238'
+        target_label: bank
+        replacement: 'Hayhay'
+      - source_labels: [sender_bank]
+        regex: 'Ziraat_Bankasi'
+        target_label: sender_bank
+        replacement: 'Ziraat Bankası'
+      - source_labels: [sender_bank]
+        regex: 'Vakifbank'
+        target_label: sender_bank
+        replacement: 'Vakıfbank'
+      - source_labels: [sender_bank]
+        regex: 'Garanti_BBVA'
+        target_label: sender_bank
+        replacement: 'Garanti BBVA'
+      - source_labels: [sender_bank]
+        regex: 'Is_Bankasi'
+        target_label: sender_bank
+        replacement: 'İş Bankası'
+      - source_labels: [sender_bank]
+        regex: 'Yapi_Kredi'
+        target_label: sender_bank
+        replacement: 'Yapı Kredi'
+      - source_labels: [sender_bank]
+        regex: 'ING_Bank'
+        target_label: sender_bank
+        replacement: 'ING Bank'
+      - source_labels: [sender_bank]
+        regex: 'QNB___Enpara_com'
+        target_label: sender_bank
+        replacement: 'QNB / Enpara.com'
+      - source_labels: [sender_bank]
+        regex: 'Albaraka_Turk'
+        target_label: sender_bank
+        replacement: 'Albaraka Türk'
+      - source_labels: [sender_bank]
+        regex: 'Kuveyt_Turk'
+        target_label: sender_bank
+        replacement: 'Kuveyt Türk'
+      - source_labels: [sender_bank]
+        regex: 'Turkiye_Finans'
+        target_label: sender_bank
+        replacement: 'Türkiye Finans'
+      - source_labels: [sender_bank]
+        regex: 'Ziraat_Katilim'
+        target_label: sender_bank
+        replacement: 'Ziraat Katılım'
+      - source_labels: [sender_bank]
+        regex: 'Vakif_Katilim'
+        target_label: sender_bank
+        replacement: 'Vakıf Katılım'
+  # Flink JobManager of the session cluster (job status, checkpoints, restarts). Job metrics get
+  # flow from their job name; cluster metrics (slots, TaskManagers, running jobs) have no flow.
   - job_name: flink-jobmanager
     dns_sd_configs:
       - names: [flink-jobmanager]
@@ -117,6 +201,10 @@ scrape_configs:
         replacement: flink
       - target_label: flink_component
         replacement: jobmanager
+    metric_relabel_configs:
+      - source_labels: [job_name]
+        regex: flink_(.+)_reconciler
+        target_label: flow
   - job_name: kafka
     static_configs:
       - targets: [kafka-jmx-exporter:5556]

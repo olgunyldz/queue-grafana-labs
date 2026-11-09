@@ -1,3 +1,13 @@
+# Shared settings of the Flink session cluster (see the Flink section below).
+x-flink-image: &flink-image
+  image: flink-reconciler:local
+  pull_policy: never
+  restart: unless-stopped
+  volumes:
+    - ./volumes/flink-checkpoints:/opt/flink/checkpoints
+  environment:
+    JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
+
 services:
   kafka:
     image: apache/kafka:4.4.0
@@ -29,21 +39,22 @@ services:
 
   kafka-init:
     image: apache/kafka:4.4.0
-    # One topic per FAST event (fast_send, fast_send_success, fast_send_failed) and the reconciler's
-    # result topics (fast_transfer_matched, fast_transfer_unmatched).
+    # Legacy FAST topics, directional FAST/Havale/EFT topics and reconciler result topics.
     entrypoint: [ "/bin/sh", "-c" ]
     command:
       - |
         set -e
-        for topic in fast_send fast_send_success fast_send_failed fast_transfer_matched fast_transfer_unmatched; do
+        for topic in fast_incoming_request fast_incoming_success fast_incoming_failed fast_outgoing_request fast_outgoing_success fast_outgoing_failed havale_request havale_success havale_failed eft_incoming_request eft_incoming_success eft_incoming_failed eft_outgoing_request eft_outgoing_success eft_outgoing_failed fast_transfer_matched fast_transfer_unmatched havale_transfer_matched havale_transfer_unmatched eft_transfer_matched eft_transfer_unmatched fast_transfer_status havale_transfer_status eft_transfer_status ledger_commands ledger_results; do
           /opt/kafka/bin/kafka-topics.sh --create --if-not-exists --topic "$$topic" --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1
         done
     depends_on:
       kafka:
         condition: service_healthy
 
+  # Official prometheus/jmx_exporter 1.7.0 jar, pinned and checksum-verified (see its Dockerfile).
   kafka-jmx-exporter:
-    image: bitnami/jmx-exporter:latest
+    build: ./observability/kafka-jmx-exporter
+    image: kafka-jmx-exporter:local
     command: [ "5556", "/etc/jmx-exporter/config.yml" ]
     volumes:
       - ./observability/kafka-jmx-exporter/config.yml:/etc/jmx-exporter/config.yml:ro
@@ -55,6 +66,8 @@ services:
     image: danielqsj/kafka-exporter:v1.9.0
     command:
       - --kafka.server=kafka:9092
+      # Protocol version the exporter speaks, not the broker version: Kafka 4.x brokers still accept the
+      # 3.9 protocol (they dropped only pre-2.1 protocols). Verified against the Kafka 4.4 broker here.
       - --kafka.version=3.9.0
       - --topic.filter=^[^_].*
       - --group.filter=.*
@@ -66,17 +79,18 @@ services:
       kafka-init:
         condition: service_completed_successfully
 
-  # FAST producer (C# / .NET 10), 2 replicas behind the producer-lb load balancer.
-  dotnet-producer:
+  # Mock producer (C# / .NET 10), 2 replicas behind the producer-lb load balancer.
+  mock-producer:
     build:
       context: ./dotnet
-      dockerfile: FastTransfer.Producer/Dockerfile
-    image: fast-transfer-producer:local
+      dockerfile: MockProducer/Dockerfile
+    image: mock-producer:local
     deploy:
       replicas: 2
     environment:
       KAFKA_BROKERS: kafka:9092
       HTTP_ADDR: http://0.0.0.0:8080
+      EVENT_NAMES: fast_incoming_request,fast_incoming_success,fast_incoming_failed,fast_outgoing_request,fast_outgoing_success,fast_outgoing_failed,havale_request,havale_success,havale_failed,eft_incoming_request,eft_incoming_success,eft_incoming_failed,eft_outgoing_request,eft_outgoing_success,eft_outgoing_failed
     expose:
       - "8080"
     depends_on:
@@ -91,116 +105,114 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - dotnet-producer
+      - mock-producer
 
-  # FAST consumer (C# / .NET 10), 2 replicas in the same consumer group.
-  # Kafka splits the partitions between them (range assignor, see ConsumerApp.cs).
-  dotnet-consumer:
+  # One mock consumer process listens to every transfer topic.
+  mock-consumer:
     build:
       context: ./dotnet
-      dockerfile: FastTransfer.Consumer/Dockerfile
-    image: fast-transfer-consumer:local
-    deploy:
-      replicas: 2
+      dockerfile: MockConsumer/Dockerfile
+    image: mock-consumer:local
     environment:
       KAFKA_BROKERS: kafka:9092
-      KAFKA_TOPICS: fast_send,fast_send_success,fast_send_failed
-      KAFKA_GROUP: fast-transfer-consumers-dotnet
+      KAFKA_SUBSCRIPTIONS: eft_incoming=eft_incoming_request,eft_incoming_success,eft_incoming_failed;eft_outgoing=eft_outgoing_request,eft_outgoing_success,eft_outgoing_failed;havale=havale_request,havale_success,havale_failed;fast_incoming=fast_incoming_request,fast_incoming_success,fast_incoming_failed;fast_outgoing=fast_outgoing_request,fast_outgoing_success,fast_outgoing_failed
       METRICS_ADDR: http://0.0.0.0:2114
-    ports:
-      # One host port per replica (2114 and 2115); Prometheus scrapes each replica via Docker DNS.
-      - "2114-2115:2114"
+    expose:
+      - "2114"
     depends_on:
       kafka-init:
         condition: service_completed_successfully
 
-  # FAST reconciler (Java / Kafka Streams): matches fast_send with its outcome by transaction_id and
-  # produces the FAST business metrics. State is in RocksDB + a changelog topic, so instances can be
-  # added, removed or restarted without losing in-flight transfers (one standby replica per task).
-  fast-reconciler:
-    build: ./reconciler
-    image: fast-reconciler:local
-    deploy:
-      replicas: 2
+  # Mock account ledger for the transfer saga: blocks, settles and releases amounts on the saga's
+  # commands and answers on ledger_results. BLOCK_REJECT_RATE is the share of blocks rejected for
+  # insufficient balance.
+  ledger:
+    build: ./ledger
+    image: ledger:local
+    restart: unless-stopped
     environment:
       KAFKA_BROKERS: kafka:9092
-      APPLICATION_ID: fast-reconciler
-      FAST_PENDING_THRESHOLD: 30s
-      FAST_MATCH_TTL: 10m
-      NUM_STANDBY_REPLICAS: "1"
-      PROCESSING_GUARANTEE: exactly_once_v2
-      METRICS_PORT: "9400"
-    ports:
-      - "9400-9401:9400"
+      BLOCK_REJECT_RATE: "0.1"
+      LEDGER_LATENCY_MS: "5-20"
     depends_on:
       kafka-init:
         condition: service_completed_successfully
 
-  # Apache Flink replacement reconciler. It is intentionally separate from the
-  # Kafka Streams reconciler above so both implementations can be compared.
-  flink-jobmanager:
-    build: ./flink-reconciler
-    image: fast-flink-reconciler:local
-    command: jobmanager
-    environment:
-      JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
-    ports:
-      - "18082:8081"
-    expose:
-      - "9249"
-    volumes:
-      - ./volumes/flink-checkpoints:/opt/flink/checkpoints
-    depends_on:
-      kafka-init:
-        condition: service_completed_successfully
-      flink-checkpoint-init:
-        condition: service_completed_successfully
+  # ---- Flink reconcilers -------------------------------------------------------------------
+  # One Flink session cluster (one JobManager / UI, three TaskManagers) running one job per flow:
+  # flink-fast-reconciler, flink-havale-reconciler, flink-eft-reconciler. Each job has its own state,
+  # checkpoint directory (volumes/flink-checkpoints/<flow>), consumer group and Kafka transactional
+  # ids; the JobManager and the TaskManagers are shared. flink-job-supervisor submits the jobs and
+  # resubmits them from their latest checkpoint when they are gone (e.g. after a JobManager restart).
+  # Flink UI (all jobs): http://localhost:18081
 
+  # Builds flink-reconciler:local once (the other Flink services reuse it with pull_policy: never;
+  # building one tag from several services in parallel fails with "image ... already exists")
+  # and prepares one checkpoint directory per flow.
   flink-checkpoint-init:
-    image: fast-flink-reconciler:local
+    build: ./flink/reconciler
+    image: flink-reconciler:local
     user: "0:0"
     entrypoint: [ "/bin/bash", "-c" ]
     command:
-      - chown -R 9999:9999 /opt/flink/checkpoints
+      - mkdir -p /opt/flink/checkpoints/fast /opt/flink/checkpoints/havale /opt/flink/checkpoints/eft && chown -R 9999:9999 /opt/flink/checkpoints
     volumes:
       - ./volumes/flink-checkpoints:/opt/flink/checkpoints
 
+  flink-jobmanager:
+    <<: *flink-image
+    command: jobmanager
+    ports:
+      - "18081:8081"
+    expose:
+      - "9249"
+    depends_on:
+      flink-checkpoint-init:
+        condition: service_completed_successfully
+
+  # 3 x 5 slots = 15; the three jobs use 3 x 3 = 9. If one TaskManager is lost, 10 slots remain,
+  # so all three jobs can still be scheduled.
   flink-taskmanager:
-    image: fast-flink-reconciler:local
+    <<: *flink-image
     command: taskmanager
     environment:
       JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
-      TASK_MANAGER_NUMBER_OF_TASK_SLOTS: "3"
+      FLINK_PROPERTIES: |
+        taskmanager.numberOfTaskSlots: 5
+    deploy:
+      replicas: 3
     expose:
       - "9249"
-    volumes:
-      - ./volumes/flink-checkpoints:/opt/flink/checkpoints
     depends_on:
       flink-jobmanager:
         condition: service_started
 
-  flink-reconciler-submit:
-    image: fast-flink-reconciler:local
-    entrypoint: [ "/bin/bash", "-c" ]
-    command:
-      - >-
-        until curl -fsS http://flink-jobmanager:8081/overview >/dev/null; do sleep 2; done; /opt/flink/bin/flink run -d -m flink-jobmanager:8081 -p 3 /opt/flink/usrlib/fast-flink-reconciler.jar
-    environment:
-      KAFKA_BROKERS: kafka:9092
-      APPLICATION_ID: fast-flink-reconciler
-      JAVA_TOOL_OPTIONS: --add-opens=java.base/java.util=ALL-UNNAMED
-      FAST_PENDING_THRESHOLD: 30s
-      FAST_MATCH_TTL: 10m
-      CHECKPOINT_INTERVAL: 10s
-      PARALLELISM: "3"
+  # Keeps one job per flow running (docker/supervise-jobs.sh). A job cancelled from the UI stays
+  # stopped; start it again with:
+  #   docker compose exec flink-job-supervisor /opt/flink/docker/supervise-jobs.sh start <flow>
+  flink-job-supervisor:
+    image: flink-reconciler:local
+    pull_policy: never
+    restart: unless-stopped
+    user: "9999:9999"
+    entrypoint: [ "/opt/flink/docker/supervise-jobs.sh" ]
     volumes:
       - ./volumes/flink-checkpoints:/opt/flink/checkpoints
+    environment:
+      JOBMANAGER: flink-jobmanager:8081
+      FLOWS: fast havale eft
+      PARALLELISM: "3"
+      SUPERVISE_INTERVAL: "30"
+      # Job settings, read by each job's main() when it is submitted:
+      KAFKA_BROKERS: kafka:9092
+      PENDING_THRESHOLD: 30s
+      MATCH_TTL: 10m
+      CHECKPOINT_INTERVAL: 10s
+      JAVA_TOOL_OPTIONS: --add-opens=java.base/java.util=ALL-UNNAMED
     depends_on:
       kafka-init:
         condition: service_completed_successfully
       flink-jobmanager:
-        condition: service_started
-      flink-taskmanager:
         condition: service_started
 
   prometheus:
@@ -212,10 +224,8 @@ services:
       - ./observability/prometheus/rules:/etc/prometheus/rules:ro
       - ./volumes/prometheus:/prometheus
     depends_on:
-      - dotnet-producer
-      - dotnet-consumer
-      - fast-reconciler
-      - flink-taskmanager
+      - mock-producer
+      - mock-consumer
       - flink-jobmanager
       - kafka-jmx-exporter
       - kafka-exporter

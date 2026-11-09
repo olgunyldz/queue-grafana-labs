@@ -1,0 +1,347 @@
+# Transfer alerts, one alert instance per flow (fast | havale | eft) and reconciler consumer group
+# (flink-<flow>-reconciler). To change a limit, edit the threshold "params" (and "for") of the rule
+# below. All counts are over a sliding 5 minute window of what the reconciler consumed (Kafka committed
+# offsets, see observability/prometheus/rules/transfers.yml). The same thresholds apply to every flow;
+# add a {flow="..."} filter and copy a rule if a flow needs its own limit.
+#
+# | Alert                                          | Condition                          | Severity | For |
+# |------------------------------------------------|------------------------------------|----------|-----|
+# | Transfer request/outcome mismatch              | > 10%                              | warning  | 5m  |
+# | Transfer request volume low (business hours)   | < 100                              | warning  | 5m  |
+# | Transfer request volume high                   | > 6000                             | critical | 5m  |
+# | Transfer outcome volume low (business hours)   | < 100                              | warning  | 5m  |
+# | Transfer outcome volume high                   | > 6000                             | critical | 5m  |
+# | Transfer failed count high                     | > 500                              | critical | 5m  |
+# | Transfer failed/success ratio high             | > 20%                              | critical | 5m  |
+# | Transfer stuck transfers high                  | > 50 waiting > 30s (reconciler)    | warning  | 5m  |
+# | Transfer saga manual review                    | any transfer needs manual review   | critical | 1m  |
+#
+# Low-volume alerts are only evaluated during business hours (transfer:business_hours == 1);
+# outside those hours the query is empty and the rule stays Normal.
+# The stuck-transfers rule reads the Flink reconcilers' own metrics instead of consumer group offsets.
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: transfer-reconciliation
+    folder: Transfers
+    interval: 30s
+    rules:
+      - uid: fast-send-outcome-mismatch
+        title: Transfer request/outcome mismatch
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              refId: A
+              expr: 'transfer:outcome_mismatch:ratio5m{consumergroup=~"flink-.+-reconciler"}'
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0.1] }
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+          domain: transfer
+        annotations:
+          summary: >-
+            Transfer request/outcome mismatch for flow {{ $labels.flow }} ({{ $labels.consumergroup }}){{ if $values.A }}: {{ humanizePercentage $values.A.Value }}{{ end }}
+          description: >-
+            The difference between requests and their outcomes (success + failed) is above 10%.{{ if $values.A }} Current value: {{ humanizePercentage $values.A.Value }}.{{ end }}
+        isPaused: false
+      - uid: fast-send-volume-low
+        title: Transfer request volume low (business hours)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              refId: A
+              expr: 'transfer:sent:increase5m{consumergroup=~"flink-.+-reconciler"} and on () (transfer:business_hours == 1)'
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [100] }
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+          domain: transfer
+        annotations:
+          summary: >-
+            Transfer request volume low (business hours) for flow {{ $labels.flow }} ({{ $labels.consumergroup }}){{ if $values.A }}: {{ printf "%.0f" $values.A.Value }}{{ end }}
+          description: >-
+            Fewer than 100 requests were consumed in the last 5 minutes during business hours (09:00-18:00 Istanbul).{{ if $values.A }} Current value: {{ printf "%.0f" $values.A.Value }}.{{ end }}
+        isPaused: false
+      - uid: fast-send-volume-high
+        title: Transfer request volume high
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              refId: A
+              expr: 'transfer:sent:increase5m{consumergroup=~"flink-.+-reconciler"}'
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [6000] }
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+          domain: transfer
+        annotations:
+          summary: >-
+            Transfer request volume high for flow {{ $labels.flow }} ({{ $labels.consumergroup }}){{ if $values.A }}: {{ printf "%.0f" $values.A.Value }}{{ end }}
+          description: >-
+            More than 6000 requests were consumed in the last 5 minutes.{{ if $values.A }} Current value: {{ printf "%.0f" $values.A.Value }}.{{ end }}
+        isPaused: false
+      - uid: fast-outcome-volume-low
+        title: Transfer outcome volume low (business hours)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              refId: A
+              expr: 'transfer:outcome:increase5m{consumergroup=~"flink-.+-reconciler"} and on () (transfer:business_hours == 1)'
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [100] }
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+          domain: transfer
+        annotations:
+          summary: >-
+            Transfer outcome volume low (business hours) for flow {{ $labels.flow }} ({{ $labels.consumergroup }}){{ if $values.A }}: {{ printf "%.0f" $values.A.Value }}{{ end }}
+          description: >-
+            Fewer than 100 outcomes (successful outcomes + failed outcomes) were consumed in the last 5 minutes during business hours.{{ if $values.A }} Current value: {{ printf "%.0f" $values.A.Value }}.{{ end }}
+        isPaused: false
+      - uid: fast-outcome-volume-high
+        title: Transfer outcome volume high
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              refId: A
+              expr: 'transfer:outcome:increase5m{consumergroup=~"flink-.+-reconciler"}'
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [6000] }
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+          domain: transfer
+        annotations:
+          summary: >-
+            Transfer outcome volume high for flow {{ $labels.flow }} ({{ $labels.consumergroup }}){{ if $values.A }}: {{ printf "%.0f" $values.A.Value }}{{ end }}
+          description: >-
+            More than 6000 outcomes (successful outcomes + failed outcomes) were consumed in the last 5 minutes.{{ if $values.A }} Current value: {{ printf "%.0f" $values.A.Value }}.{{ end }}
+        isPaused: false
+      - uid: fast-failed-count-high
+        title: Transfer failed count high
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              refId: A
+              expr: 'transfer:failed:increase5m{consumergroup=~"flink-.+-reconciler"}'
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [500] }
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+          domain: transfer
+        annotations:
+          summary: >-
+            Transfer failed count high for flow {{ $labels.flow }} ({{ $labels.consumergroup }}){{ if $values.A }}: {{ printf "%.0f" $values.A.Value }}{{ end }}
+          description: >-
+            More than 500 failed outcomes were consumed in the last 5 minutes.{{ if $values.A }} Current value: {{ printf "%.0f" $values.A.Value }}.{{ end }}
+        isPaused: false
+      - uid: fast-failed-success-ratio-high
+        title: Transfer failed/success ratio high
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              refId: A
+              expr: 'transfer:failed_success:ratio5m{consumergroup=~"flink-.+-reconciler"}'
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0.2] }
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+          domain: transfer
+        annotations:
+          summary: >-
+            Transfer failed/success ratio high for flow {{ $labels.flow }} ({{ $labels.consumergroup }}){{ if $values.A }}: {{ humanizePercentage $values.A.Value }}{{ end }}
+          description: >-
+            The failed outcomes / successful outcomes ratio is above 20% for the last 5 minutes.{{ if $values.A }} Current value: {{ humanizePercentage $values.A.Value }}.{{ end }}
+        isPaused: false
+      # ---- Reconciler metrics -------------------------------------------------------------------
+      - uid: transfer-saga-manual-review
+        title: Transfer saga manual review
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 900, to: 0 }
+            datasourceUid: PBFA97CFB590B2093
+            model: { refId: A, expr: 'sum by (flow) (increase(reconciler_saga_manual_review_total{impl="flink"}[10m]))', instant: true, range: false, intervalMs: 1000, maxDataPoints: 43200 }
+          - refId: C
+            datasourceUid: __expr__
+            model: { refId: C, type: threshold, expression: A, conditions: [{ evaluator: { type: gt, params: [0] } }] }
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: critical, domain: transfer }
+        annotations:
+          summary: "Transfer saga needs manual review (flow {{ $labels.flow }})"
+          description: "{{ if $values.A }}{{ printf \"%.0f\" $values.A.Value }} transfer(s){{ else }}A transfer{{ end }} in flow {{ $labels.flow }} could not be completed automatically in the last 10 minutes: the ledger did not answer after several sends, or a blocked amount had no FAST outcome. See the Geliştirici dashboard, Saga section, and the flow's <flow>_transfer_status topic."
+        isPaused: false
+
+      - uid: transfer-saga-open-block-old
+        title: Transfer saga open block too old
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: PBFA97CFB590B2093
+            model: { refId: A, expr: 'max by (flow) (reconciler_saga_oldest_open_seconds{impl="flink"})', instant: true, range: false, intervalMs: 1000, maxDataPoints: 43200 }
+          - refId: C
+            datasourceUid: __expr__
+            model: { refId: C, type: threshold, expression: A, conditions: [{ evaluator: { type: gt, params: [540] } }] }
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, domain: transfer }
+        annotations:
+          summary: "Blocked amount has been waiting too long (flow {{ $labels.flow }})"
+          description: "The oldest blocked amount in flow {{ $labels.flow }} has been held for {{ if $values.A }}{{ printf \"%.0f\" $values.A.Value }} s{{ else }}more than 9 minutes{{ end }}. The saga gives up after 10 minutes without a FAST outcome; check FAST and the ledger."
+        isPaused: false
+
+      - uid: fast-stuck-transfers-high
+        title: Transfer stuck transfers high
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: PBFA97CFB590B2093
+            model:
+              refId: A
+              expr: 'sum by (flow) (reconciler_stuck)'
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [50] }
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+          domain: transfer
+        annotations:
+          summary: >-
+            Transfer stuck transfers high for flow {{ $labels.flow }}{{ if $values.A }}: {{ printf "%.0f" $values.A.Value }} transfers waiting > 30s{{ end }}
+          description: >-
+            More than 50 requests have been waiting longer than 30 seconds for their outcome, for 5 minutes.
+            The transfers that never get an outcome are written to the <flow>_transfer_unmatched topic after 10 minutes.
+        isPaused: false
+
+# The Kafka Streams reconciler was removed; delete its alert rule from Grafana.
+deleteRules:
+  - orgId: 1
+    uid: fast-reconciler-down

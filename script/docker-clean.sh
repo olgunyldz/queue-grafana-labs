@@ -32,12 +32,10 @@ do
 done
 
 echo "Recreating empty project volume directories..."
-mkdir -p \
-  "$VOLUME_DIR/kafka" \
-  "$VOLUME_DIR/flink-checkpoints" \
-  "$VOLUME_DIR/prometheus" \
-  "$VOLUME_DIR/loki" \
-  "$VOLUME_DIR/alloy" \
-  "$VOLUME_DIR/grafana"
+for volume_name in kafka flink-checkpoints prometheus loki alloy grafana; do
+  mkdir -p "$VOLUME_DIR/$volume_name"
+  # Tracked placeholder that keeps the directory in Git (see .gitignore); rm -rf above removed it.
+  touch "$VOLUME_DIR/$volume_name/.gitkeep"
+done
 
 echo "Docker services and project volumes cleaned."

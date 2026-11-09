@@ -1,0 +1,46 @@
+# Saga early outcome: the FAST outcome is sent right after the request (no wait), so it usually arrives
+# before the ledger confirms the block. The saga must keep it and apply it once BLOCKED arrives.
+# Expected in Grafana: no conflicts, no manual reviews; the Developer dashboard shows the transitions
+# but not the outcome-first path separately. This case proves the buffering, not the capacity.
+config:
+  target: http://127.0.0.1:8080
+  processor: ../processors/fast.cjs
+  plugins:
+    expect: {}
+    ensure:
+      thresholds:
+        - http.response_time.p95: 1000
+  phases:
+    - name: sustained
+      duration: 180
+      arrivalRate: 10
+    - name: drain
+      duration: 60
+      arrivalRate: 1
+  http:
+    timeout: 30
+
+scenarios:
+  - name: fast-incoming
+    weight: 1
+    flow:
+      - function: newTransfer
+      - post: { url: /events/fast/incoming/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 0.05
+      - post: { url: /events/fast/incoming/success, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+
+  - name: havale
+    weight: 1
+    flow:
+      - function: newTransfer
+      - post: { url: /events/havale/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 0.05
+      - post: { url: /events/havale/failed, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+
+  - name: eft-outgoing
+    weight: 1
+    flow:
+      - function: newTransfer
+      - post: { url: /events/eft/outgoing/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 0.05
+      - post: { url: /events/eft/outgoing/success, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }

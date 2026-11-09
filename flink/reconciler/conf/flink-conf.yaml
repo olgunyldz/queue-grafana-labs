@@ -1,0 +1,21 @@
+# Shared by the per-flow clusters (fast, havale, eft). Per-cluster values come from compose:
+#   JOB_MANAGER_RPC_ADDRESS        -> jobmanager.rpc.address (flink-<flow>-jobmanager)
+#   FLINK_PROPERTIES               -> state.checkpoints.dir (one directory per flow)
+jobmanager.memory.process.size: 768m
+taskmanager.memory.process.size: 1536m
+# 4 slots for parallelism 3: one spare slot per cluster.
+taskmanager.numberOfTaskSlots: 4
+
+parallelism.default: 3
+
+state.backend.type: rocksdb
+state.checkpoints.dir: file:///opt/flink/checkpoints
+execution.checkpointing.interval: 10 s
+execution.checkpointing.mode: EXACTLY_ONCE
+# Keep the last checkpoint when the job is cancelled so it can be restarted from it.
+execution.checkpointing.externalized-checkpoint-retention: RETAIN_ON_CANCELLATION
+
+metrics.reporters: prom
+metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
+metrics.reporter.prom.port: 9249
+metrics.scope.delimiter: _

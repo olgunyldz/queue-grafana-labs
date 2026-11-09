@@ -1,0 +1,28 @@
+# Request backlog: requests only, 10 -> 100 per second for 2 minutes (FAST incoming). No outcomes are
+# sent, so every transfer waits in BLOCKED for the outcome.
+# Run it with the Flink job paused, to see the backlog build up in the reconciler lag, then start the
+# job again to see it drain. Pausing stops the Flink TaskManager, which stops all three flows:
+#   docker compose stop flink-taskmanager
+#   npm run test:request-backlog
+#   docker compose start flink-taskmanager
+config:
+  target: http://127.0.0.1:8080
+  processor: ../processors/fast.cjs
+  plugins:
+    expect: {}
+  phases:
+    - name: warmup
+      duration: 15
+      arrivalRate: 2
+    - name: backlog
+      duration: 120
+      arrivalRate: 10
+      rampTo: 100
+  http:
+    timeout: 10
+
+scenarios:
+  - name: fast-incoming-request-only
+    flow:
+      - function: newTransfer
+      - post: { url: /events/fast/incoming/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }

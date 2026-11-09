@@ -1,0 +1,63 @@
+# Saga capacity: ramp from 5 to 120 transfers/s over 5 minutes (all flows), outcome after the block.
+# Watch where the request -> BLOCKED p95 starts to grow, the reconciler lag, and whether the oldest open
+# block grows (Grafana: SRE and Developer dashboards). The first rate where a criterion breaks is the
+# practical capacity.
+config:
+  target: http://127.0.0.1:8080
+  processor: ../processors/fast.cjs
+  plugins:
+    expect: {}
+    ensure:
+      thresholds:
+        - http.response_time.p95: 1000
+  phases:
+    - name: ramp
+      duration: 300
+      arrivalRate: 5
+      rampTo: 120
+    - name: drain
+      duration: 60
+      arrivalRate: 1
+  http:
+    timeout: 30
+
+scenarios:
+  - name: fast-incoming
+    weight: 3
+    flow:
+      - function: newTransfer
+      - post: { url: /events/fast/incoming/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 20
+      - post: { url: /events/fast/incoming/success, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+
+  - name: fast-outgoing
+    weight: 3
+    flow:
+      - function: newTransfer
+      - post: { url: /events/fast/outgoing/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 20
+      - post: { url: /events/fast/outgoing/success, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+
+  - name: havale
+    weight: 2
+    flow:
+      - function: newTransfer
+      - post: { url: /events/havale/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 20
+      - post: { url: /events/havale/success, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+
+  - name: eft-incoming
+    weight: 1
+    flow:
+      - function: newTransfer
+      - post: { url: /events/eft/incoming/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 20
+      - post: { url: /events/eft/incoming/success, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+
+  - name: eft-outgoing
+    weight: 1
+    flow:
+      - function: newTransfer
+      - post: { url: /events/eft/outgoing/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 20
+      - post: { url: /events/eft/outgoing/success, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }

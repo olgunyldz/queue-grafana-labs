@@ -1,6 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <!-- FAST models, bank list and env helpers shared by the producer and the consumer. -->
-  <PropertyGroup>
-    <RootNamespace>FastTransfer.Shared</RootNamespace>
-  </PropertyGroup>
-</Project>
