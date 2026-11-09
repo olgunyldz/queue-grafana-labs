@@ -205,7 +205,10 @@ scrape_configs:
       - source_labels: [job_name]
         regex: flink_(.+)_reconciler
         target_label: flow
+  # The JMX exporter builds ~1.4 MB (about 3-4 s) on every scrape: scrape less often, with a timeout that fits.
   - job_name: kafka
+    scrape_interval: 15s
+    scrape_timeout: 12s
     static_configs:
       - targets: [kafka-jmx-exporter:5556]
   - job_name: kafka-exporter

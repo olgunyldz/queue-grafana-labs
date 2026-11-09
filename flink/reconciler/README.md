@@ -15,6 +15,8 @@ each flow runs as its own job in one shared Flink session cluster, selected with
 | `havale` | `havale_{request,success,failed}`                     | `havale_transfer_matched`, `havale_transfer_unmatched` |
 | `eft`    | `eft_{incoming,outgoing}_{request,success,failed}`    | `eft_transfer_matched`, `eft_transfer_unmatched`       |
 
+Havale is a transfer between accounts of the same bank; EFT is a transfer between two banks. The producer enforces this (a mismatched request gets 400), so the reconciler only sees valid pairs.
+
 Per-flow defaults live in [Flow.java](src/main/java/fast/reconciler/flink/Flow.java). Flow-specific
 business rules belong there too when the flows start to differ.
 

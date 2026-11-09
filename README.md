@@ -76,8 +76,8 @@ Her event'in bir HTTP endpoint'i ve aynı adlı bir Kafka topic'i vardır. Kafka
 |---|---|---|---|
 | FAST gelen | `/events/fast/incoming/request` → `fast_incoming_request` | `…/success` → `fast_incoming_success` | `…/failed` → `fast_incoming_failed` |
 | FAST giden | `/events/fast/outgoing/request` → `fast_outgoing_request` | `…/success` → `fast_outgoing_success` | `…/failed` → `fast_outgoing_failed` |
-| Havale | `/events/havale/request` → `havale_request` | `…/success` → `havale_success` | `…/failed` → `havale_failed` |
-| EFT gelen | `/events/eft/incoming/request` → `eft_incoming_request` | `…/success` → `eft_incoming_success` | `…/failed` → `eft_incoming_failed` |
+| Havale (aynı banka) | `/events/havale/request` → `havale_request` | `…/success` → `havale_success` | `…/failed` → `havale_failed` |
+| EFT gelen (farklı banka) | `/events/eft/incoming/request` → `eft_incoming_request` | `…/success` → `eft_incoming_success` | `…/failed` → `eft_incoming_failed` |
 | EFT giden | `/events/eft/outgoing/request` → `eft_outgoing_request` | `…/success` → `eft_outgoing_success` | `…/failed` → `eft_outgoing_failed` |
 
 Mock consumer her akışın topic'lerini kendi consumer group'uyla (`fast_incoming`, `fast_outgoing`, `havale`, `eft_incoming`, `eft_outgoing`) okur ve teknik metrik üretir.
@@ -143,10 +143,12 @@ Başarısız sonuçta `failure_reason` zorunludur:
 Invoke-RestMethod -Method Post `
   -Uri http://127.0.0.1:8080/events/havale/failed `
   -ContentType 'application/json' `
-  -Body '{"transaction_id":"tx-1002","amount":500,"failure_reason":"INSUFFICIENT_BALANCE"}'
+  -Body '{"transaction_id":"tx-1002","amount":500,"sender_bank":"00010","receiver_bank":"00010","failure_reason":"INSUFFICIENT_BALANCE"}'
 ```
 
-`transaction_id` ve `amount` (> 0) her event'te zorunludur; eşleşen kayıtta tutar ve bankalar request'ten alınır. Başarılı HTTP kabulü `202` (gövdede UUIDv7 event `id`), geçersiz body `400`, bilinmeyen endpoint `404`, Kafka istemci kuyruğuna yazılamazsa `503` döndürür.
+`transaction_id` ve `amount` (> 0) her event'te zorunludur; eşleşen kayıtta tutar ve bankalar request'ten alınır.
+
+**Havale ve EFT kuralı:** Havale, aynı bankanın hesapları arasındaki transferdir: gönderen ve alıcı banka aynı olmalıdır. EFT, bankalar arası transferdir: gönderen ve alıcı banka farklı olmalıdır. Banka alanı yoksa IBAN'ın 5–9. karakterleri banka kodu olarak alınır. Kurala uymayan havale veya EFT isteği `400` ile reddedilir; FAST için banka kuralı yoktur. Başarılı HTTP kabulü `202` (gövdede UUIDv7 event `id`), geçersiz body `400`, bilinmeyen endpoint `404`, Kafka istemci kuyruğuna yazılamazsa `503` döndürür.
 
 Panoları sürekli trafikle doldurmak için: `npm run test:demo-steady` (bkz. [dashboard.md → Demo akışı](./dashboard.md#5-demo-akışı)).
 

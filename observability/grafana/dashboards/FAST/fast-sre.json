@@ -935,7 +935,7 @@
     {
       "type": "stat",
       "title": "En eski açık bloke (s)",
-      "description": "Ledger'da en uzun süredir bloke olan tutar. FAST sonucu 10 dk içinde gelmezse MANUAL_REVIEW olur.",
+      "description": "Ledger'da en uzun süredir bloke olan tutar. Sonuç 10 dk içinde gelmezse MANUAL_REVIEW olur.",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -1211,7 +1211,7 @@
     {
       "type": "timeseries",
       "title": "En eski açık bloke zamanla (s)",
-      "description": "540 s üzeri: FAST sonucu zaman aşımına yaklaşıyor.",
+      "description": "540 s üzeri: sonuç zaman aşımına yaklaşıyor.",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"

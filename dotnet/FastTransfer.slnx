@@ -2,4 +2,5 @@
   <Project Path="Shared/Shared.csproj" />
   <Project Path="MockProducer/MockProducer.csproj" />
   <Project Path="MockConsumer/MockConsumer.csproj" />
+  <Project Path="Shared.Tests/Shared.Tests.csproj" />
 </Solution>

@@ -32,7 +32,7 @@ scenarios:
   - name: havale
     weight: 1
     flow:
-      - function: newTransfer
+      - function: newHavaleTransfer
       - post: { url: /events/havale/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
       - think: 0.05
       - post: { url: /events/havale/failed, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
@@ -40,7 +40,7 @@ scenarios:
   - name: eft-outgoing
     weight: 1
     flow:
-      - function: newTransfer
+      - function: newEftTransfer
       - post: { url: /events/eft/outgoing/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
       - think: 0.05
       - post: { url: /events/eft/outgoing/success, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }

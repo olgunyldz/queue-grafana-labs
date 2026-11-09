@@ -125,7 +125,7 @@ Grafana elle yapılandırılmaz; her şey `observability/grafana/provisioning/` 
 Üç akışın panoları aynı yapıdadır; farklar şunlardır:
 
 - **FAST** ve **EFT**'de gelen (`incoming`) ve giden (`outgoing`) yönler ayrıdır; İş Birimi panosunda "Gelen / giden" bölümü vardır.
-- **Havale** tek yönlüdür (`havale_request` → `havale_success` / `havale_failed`); bu bölüm yoktur.
+- **Havale** aynı bankanın hesapları arasındaki transferdir ve gelen/giden ayrımı yoktur (`havale_request` → `havale_success` / `havale_failed`); bu bölüm yoktur.
 
 Varsayılan zaman aralığı son 1 saat, yenileme 30 saniyedir. "Seçili aralık" yazan sayılar sağ üstteki zaman aralığına göre hesaplanır.
 

@@ -1602,7 +1602,7 @@
     {
       "type": "stat",
       "title": "İade edilen tutar (aralıkta)",
-      "description": "FAST başarısız olduğunda bloke tutarın gönderene iadesi.",
+      "description": "Sonucu başarısız olan transferde bloke tutarın gönderene iadesi.",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"

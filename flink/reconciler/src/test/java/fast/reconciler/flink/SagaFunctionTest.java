@@ -69,9 +69,11 @@ class SagaFunctionTest {
         drain();
         ledger("BLOCK_REJECTED", "tx-2", 100);
         assertEquals("REJECTED", lastState());
-        // A FAST outcome after a rejected block must not settle anything.
+        // A FAST outcome after a rejected block must not settle anything, and is not a conflict.
         outcome("fast_incoming_success", "tx-2", 200);
         assertTrue(drain().isEmpty());
+        assertEquals(1, saga().counterValue("outcome_after_rejection_total"));
+        assertEquals(0, saga().counterValue("conflicts_total"));
     }
 
     @Test
@@ -193,6 +195,41 @@ class SagaFunctionTest {
         harness.open();
         assertEquals(12_550, restored.openAmountKurus(), "the held amount is restored");
         assertEquals(1, restored.countOpen(2));
+    }
+
+    @Test
+    void havaleGoesThroughTheSameSagaWithItsOwnOutcomes() throws Exception {
+        // Havale (same-bank transfer) uses the havale topics; the saga waits for havale_success / havale_failed.
+        harness.close();
+        FlinkReconcilerConfig config = new FlinkReconcilerConfig(
+                "dummy:9092", "havale", "flink-havale-reconciler-test",
+                "havale_request", "havale_success", "havale_failed",
+                "havale_transfer_matched", "havale_transfer_unmatched", 30_000, 600_000, 10_000, 1);
+        harness = new KeyedOneInputStreamOperatorTestHarness<>(
+                new KeyedProcessOperator<>(new SagaFunction(config, SagaSettings.defaults())),
+                InputEvent::key,
+                BasicTypeInfo.STRING_TYPE_INFO,
+                1,
+                1,
+                0);
+        harness.open();
+        harness.setProcessingTime(0);
+
+        harness.processElement(new StreamRecord<>(event("havale_request", "tx-h1", 0, "")));
+        List<OutputRecord> out = drain();
+        assertEquals("BLOCK", json(command(out)).get("command").asText());
+        assertEquals("havale", json(command(out)).get("flow").asText());
+
+        ledger("BLOCKED", "tx-h1", 100);
+        drain();
+        harness.setProcessingTime(200);
+        harness.processElement(new StreamRecord<>(event("havale_success", "tx-h1", 200, "")));
+        out = drain();
+        assertEquals("SETTLE", json(command(out)).get("command").asText());
+        assertEquals("havale_transfer_status", out.get(out.size() - 1).topic);
+
+        ledger("SETTLED", "tx-h1", 300);
+        assertEquals("COMPLETED", lastState());
     }
 
     // ---- helpers ---------------------------------------------------------------------------

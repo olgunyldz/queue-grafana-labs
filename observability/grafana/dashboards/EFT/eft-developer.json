@@ -1142,7 +1142,7 @@
     {
       "type": "stat",
       "title": "Serbest bırakılan",
-      "description": "FAST başarısız sonuç verdi; bloke tutar iade edildi (RELEASED).",
+      "description": "Sonuç başarısız; bloke tutar iade edildi (RELEASED).",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -1483,7 +1483,7 @@
     {
       "type": "timeseries",
       "title": "Yeniden gönderim, manuel inceleme ve çakışma / dk",
-      "description": "Çakışma: sırası uymayan ya da tekrar eden olay. Yeniden gönderim ve çakışma 0'a yakın olmalı.",
+      "description": "Çakışma: sırası uymayan ya da tekrar eden olay; 0'a yakın olmalı. Reddedilen transferin sonucu beklenen bir olaydır ve ayrı sayılır.",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -1519,6 +1519,17 @@
           "refId": "C",
           "expr": "sum(rate(reconciler_saga_conflicts_total{impl=\"flink\", flow=\"eft\"}[$__rate_interval])) * 60",
           "legendFormat": "çakışma (beklenmeyen olay)",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "D",
+          "expr": "sum(rate(reconciler_saga_outcome_after_rejection_total{impl=\"flink\", flow=\"eft\"}[$__rate_interval])) * 60",
+          "legendFormat": "reddedilen sonrası sonuç (beklenen)",
           "range": true,
           "instant": false
         }

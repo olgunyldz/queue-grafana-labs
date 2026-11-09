@@ -51,11 +51,9 @@ function trIban(bankCode) {
   return `TR${check}${bban}`;
 }
 
-// Flow step: create a new transfer and keep it in the virtual user's context so
-// the request and its outcome event share the same transaction_id.
-function newTransfer(context, events, done) {
-  const senderBank = pickBank().code;
-  const receiverBank = pickBank().code;
+// Keeps the transfer in the virtual user's context so the request and its outcome event share the same
+// transaction_id.
+function setTransfer(context, senderBank, receiverBank) {
   context.vars.transfer = {
     transaction_id: crypto.randomUUID(),
     amount: Math.round((10 + Math.random() * 49_990) * 100) / 100,
@@ -67,6 +65,29 @@ function newTransfer(context, events, done) {
     description: pick(DESCRIPTIONS),
     source: 'artillery',
   };
+}
+
+// FAST: any two banks (the producer accepts any pair for FAST).
+function newTransfer(context, events, done) {
+  setTransfer(context, pickBank().code, pickBank().code);
+  return done();
+}
+
+// Havale: a transfer between accounts of the same bank (the producer rejects other pairs).
+function newHavaleTransfer(context, events, done) {
+  const bank = pickBank().code;
+  setTransfer(context, bank, bank);
+  return done();
+}
+
+// EFT: a transfer between two different banks (the producer rejects a same-bank pair).
+function newEftTransfer(context, events, done) {
+  const sender = pickBank().code;
+  let receiver = pickBank().code;
+  while (receiver === sender) {
+    receiver = pickBank().code;
+  }
+  setTransfer(context, sender, receiver);
   return done();
 }
 
@@ -101,4 +122,4 @@ function directionalBody(requestParams, context, ee, next) {
   return next();
 }
 
-module.exports = { newTransfer, fastBody, eventBody, directionalBody };
+module.exports = { newTransfer, newHavaleTransfer, newEftTransfer, fastBody, eventBody, directionalBody };

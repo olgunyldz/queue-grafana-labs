@@ -188,14 +188,5 @@ public static class ProducerApp
     static IResult UnknownEvent() =>
         Results.Text("unknown event; expected a configured transfer success or failed endpoint", statusCode: 404);
 
-    static string? Validate(string name, Transfer t)
-    {
-        if (string.IsNullOrWhiteSpace(t.TransactionId)) return "transaction_id is required";
-        if (t.Amount <= 0) return "amount must be greater than 0";
-        if (string.IsNullOrEmpty(t.Currency)) t.Currency = "TRY";
-        if (t.Currency != "TRY") return "transfer events must be in TRY";
-        if (name.EndsWith("_failed", StringComparison.Ordinal) && string.IsNullOrWhiteSpace(t.FailureReason))
-            return "failure_reason is required for failed events";
-        return null;
-    }
+    static string? Validate(string name, Transfer t) => TransferRules.Validate(name, t);
 }

@@ -11,6 +11,7 @@
 | Ayrı Flink uygulaması, Kafka Streams korunur | 🔄 | Geçiş sonrasında Kafka Streams reconciler kaldırıldı (kodu git geçmişinde); Flink tek reconciler |
 | Klasör `flink-fast-reconciler/` | 🔄 | Tek proje `flink/reconciler/`; FAST, Havale ve EFT aynı kodla, akış başına ayrı job ve cluster (`FLOW`) |
 | Topic'ler `fast_send*` | 🔄 | Yönlü topic'ler: `fast_{incoming,outgoing}_{request,success,failed}`, `havale_*`, `eft_*` |
+| Havale ve EFT ayrımı | ✅ | Havale: gönderen ve alıcı aynı banka; EFT: farklı banka. Üretici kuralı uygular (400); havale da saga ile ilerler |
 | Output `fast_transfer_matched / unmatched` | ✅ | Akış başına `<akış>_transfer_matched / unmatched` |
 | Shadow topic'ler | ❌ | Flink doğrudan çıktı topic'lerine yazar |
 | Eşleştirme davranışı (§3) | ✅ | Ek olarak: TTL kaydın state'e girişinden sayılır (backlog'da sahte unmatched yok); eşleşmiş ID'ler 10 dk tutulur (geç gelen duplicate sayılır) |

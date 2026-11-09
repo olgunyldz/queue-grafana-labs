@@ -26,7 +26,7 @@ FLOWS = {
     "fast": {"name": "FAST", "folder": "FAST", "directions": ["incoming", "outgoing"],
              "about": "FAST: 7/24 anlık transfer sistemi. Gelen (incoming) ve giden (outgoing) yönleri ayrı izlenir."},
     "havale": {"name": "Havale", "folder": "Havale", "directions": [],
-               "about": "Havale: aynı banka içi transfer. Tek yönlü akış: request → success / failed."},
+               "about": "Havale: aynı bankanın hesapları arasındaki transfer. Akış: request → bloke → success / failed."},
     "eft": {"name": "EFT", "folder": "EFT", "directions": ["incoming", "outgoing"],
             "about": "EFT: bankalar arası transfer. Gelen (incoming) ve giden (outgoing) yönleri ayrı izlenir."},
 }
@@ -311,7 +311,8 @@ def business(flow, meta):
     name = meta["name"]
     b = Board(f"{flow}-business", f"{name} · İş Birimi", [flow, "transfer-team", "business"],
               f"{name} transferlerinin iş görünümü: adet, başarı, hacim, süre, bankalar ve başarısızlık nedenleri.")
-    b.variables.append(custom_var("role", "Banka rolü", [("sender", "Gönderen banka"), ("receiver", "Alıcı banka")]))
+    if flow != "havale":
+        b.variables.append(custom_var("role", "Banka rolü", [("sender", "Gönderen banka"), ("receiver", "Alıcı banka")]))
 
     b.add(text(f"### {name} · İş Birimi panosu\n{meta['about']} "
                "Sayılar **seçili zaman aralığı** içindir (sağ üstten değiştirilebilir). "
@@ -398,29 +399,30 @@ def business(flow, meta):
     b.add(stat("Kesinleşen tutar (aralıkta)", [(f"sum(increase(reconciler_saga_settled_kurus_total{fl}[$__range])) / 100", "")], "currencyTRY",
                "Başarılı transferlerde karşı tarafa giden tutar.", graph=False), 6, 5)
     b.add(stat("İade edilen tutar (aralıkta)", [(f"sum(increase(reconciler_saga_released_kurus_total{fl}[$__range])) / 100", "")], "currencyTRY",
-               "FAST başarısız olduğunda bloke tutarın gönderene iadesi.", graph=False), 6, 5)
+               "Sonucu başarısız olan transferde bloke tutarın gönderene iadesi.", graph=False), 6, 5)
     b.add(stat("Bakiye yetersizliğiyle reddedilen (aralıkta)", [(f"sum(increase(reconciler_saga_rejected_kurus_total{fl}[$__range])) / 100", "")], "currencyTRY",
                "Ledger bloke edemediği için gönderilmeyen tutar.", graph=False), 6, 5)
     b.add(timeseries("Ledger'da bloke tutar zamanla (TRY)", [
         (f"sum(reconciler_saga_open_amount_try{fl})", "bloke tutar"),
     ], "currencyTRY", "Bloke tutarın zamanla değişimi. Düz çizgi yoksa bloke tutarlar kesinleşiyor ya da iade ediliyor demektir."), 24, 7)
 
-    b.row("Bankalar")
-    tbl = table("Banka özeti", [
-        q.transfers("$__range", role="$role", by="bank"),
-        q.transfers("$__range", q.ok, role="$role", by="bank"),
-        q.transfers("$__range", q.fail, role="$role", by="bank"),
-        f"{q.transfers('$__range', q.fail, role='$role', by='bank')} / clamp_min({q.transfers('$__range', role='$role', by='bank')}, 1)",
-        q.volume("$__range", q.ok, role="$role", by="bank"),
-    ], {"bank": "Banka", "Value #A": "Transfer", "Value #B": "Başarılı", "Value #C": "Başarısız",
-        "Value #D": "Hata oranı", "Value #E": "Başarılı hacim (TRY)"},
-        {"Hata oranı": "percentunit", "Başarılı hacim (TRY)": "currencyTRY"}, "Transfer",
-        "Seçili banka rolüne (gönderen / alıcı) göre banka bazında özet. Hata oranı %5 üzerinde sarı, %15 üzerinde kırmızı.")
-    b.add(tbl, 14, 10)
-    b.add(bargauge("En yüksek hata oranı (ilk 5 banka)", [
-        (f"topk(5, {q.transfers('$__range', q.fail, role='$role', by='bank')} / clamp_min({q.transfers('$__range', role='$role', by='bank')}, 1))", "{{bank}}"),
-    ], "percentunit", "Seçili aralıkta başarısız transfer oranı en yüksek bankalar.",
-        thresholds(("green", None), ("yellow", 0.05), ("red", 0.15)), max_value=1), 10, 10)
+    if flow != "havale":  # a havale is between accounts of one bank: a bank breakdown adds nothing
+        b.row("Bankalar")
+        tbl = table("Banka özeti", [
+            q.transfers("$__range", role="$role", by="bank"),
+            q.transfers("$__range", q.ok, role="$role", by="bank"),
+            q.transfers("$__range", q.fail, role="$role", by="bank"),
+            f"{q.transfers('$__range', q.fail, role='$role', by='bank')} / clamp_min({q.transfers('$__range', role='$role', by='bank')}, 1)",
+            q.volume("$__range", q.ok, role="$role", by="bank"),
+        ], {"bank": "Banka", "Value #A": "Transfer", "Value #B": "Başarılı", "Value #C": "Başarısız",
+            "Value #D": "Hata oranı", "Value #E": "Başarılı hacim (TRY)"},
+            {"Hata oranı": "percentunit", "Başarılı hacim (TRY)": "currencyTRY"}, "Transfer",
+            "Seçili banka rolüne (gönderen / alıcı) göre banka bazında özet. Hata oranı %5 üzerinde sarı, %15 üzerinde kırmızı.")
+        b.add(tbl, 14, 10)
+        b.add(bargauge("En yüksek hata oranı (ilk 5 banka)", [
+            (f"topk(5, {q.transfers('$__range', q.fail, role='$role', by='bank')} / clamp_min({q.transfers('$__range', role='$role', by='bank')}, 1))", "{{bank}}"),
+        ], "percentunit", "Seçili aralıkta başarısız transfer oranı en yüksek bankalar.",
+            thresholds(("green", None), ("yellow", 0.05), ("red", 0.15)), max_value=1), 10, 10)
 
     b.row("Başarısızlık nedenleri")
     b.add(piechart("Nedenlere göre başarısız transfer", [
@@ -499,7 +501,7 @@ def developer(flow, meta):
     b.add(stat("Kesinleşen (son 1 saat)", [(f"sum(increase(reconciler_saga_state_completed_total{{impl=\"flink\", flow=\"{flow}\"}}[$__range]))", "")],
                "short", "Bloke edilip gönderilen ve kesinleştirilen transferler (SETTLED).", graph=False, decimals=0), 6, 4)
     b.add(stat("Serbest bırakılan", [(f"sum(increase(reconciler_saga_state_failed_total{{impl=\"flink\", flow=\"{flow}\"}}[$__range]))", "")],
-               "short", "FAST başarısız sonuç verdi; bloke tutar iade edildi (RELEASED).", graph=False, decimals=0), 6, 4)
+               "short", "Sonuç başarısız; bloke tutar iade edildi (RELEASED).", graph=False, decimals=0), 6, 4)
     b.add(stat("Bakiye yetersiz (reddedilen)", [(f"sum(increase(reconciler_saga_state_rejected_total{{impl=\"flink\", flow=\"{flow}\"}}[$__range]))", "")],
                "short", "Ledger bloke etmedi; transfer gönderilmedi (BLOCK_REJECTED).", graph=False, decimals=0), 6, 4)
     b.add(stat("Manuel inceleme", [(f"sum(increase(reconciler_saga_manual_review_total{{impl=\"flink\", flow=\"{flow}\"}}[$__range]))", "")],
@@ -513,7 +515,8 @@ def developer(flow, meta):
         (f"sum(rate(reconciler_saga_retries_total{{impl=\"flink\", flow=\"{flow}\"}}[$__rate_interval])) * 60", "yeniden gönderim (ledger yanıtı gecikti)"),
         (f"sum(rate(reconciler_saga_manual_review_total{{impl=\"flink\", flow=\"{flow}\"}}[$__rate_interval])) * 60", "manuel inceleme"),
         (f"sum(rate(reconciler_saga_conflicts_total{{impl=\"flink\", flow=\"{flow}\"}}[$__rate_interval])) * 60", "çakışma (beklenmeyen olay)"),
-    ], "short", "Çakışma: sırası uymayan ya da tekrar eden olay. Yeniden gönderim ve çakışma 0'a yakın olmalı.",
+        (f"sum(rate(reconciler_saga_outcome_after_rejection_total{{impl=\"flink\", flow=\"{flow}\"}}[$__rate_interval])) * 60", "reddedilen sonrası sonuç (beklenen)"),
+    ], "short", "Çakışma: sırası uymayan ya da tekrar eden olay; 0'a yakın olmalı. Reddedilen transferin sonucu beklenen bir olaydır ve ayrı sayılır.",
         th=thresholds(("green", None), ("red", 1))), 12, 8)
 
     b.add(bargauge("Şu an her durumda transfer", [
@@ -602,7 +605,7 @@ def sre(flow, meta):
 
     b.row("Saga (açık bloke ve kuyruk)")
     b.add(stat("En eski açık bloke (s)", [(f'max(reconciler_saga_oldest_open_seconds{{impl="flink", flow="{flow}"}})', "")], "s",
-               "Ledger'da en uzun süredir bloke olan tutar. FAST sonucu 10 dk içinde gelmezse MANUAL_REVIEW olur.",
+               "Ledger'da en uzun süredir bloke olan tutar. Sonuç 10 dk içinde gelmezse MANUAL_REVIEW olur.",
                thresholds(("green", None), ("yellow", 300), ("red", 540)), graph=False, decimals=0), 6, 4)
     b.add(stat("Manuel inceleme (aralıkta)", [(f'sum(increase(reconciler_saga_manual_review_total{{impl="flink", flow="{flow}"}}[$__range]))', "")], "short",
                "Otomatik tamamlanamayan transferler. 0 olmalı.", thresholds(("green", None), ("red", 1)), graph=False, decimals=0), 6, 4)
@@ -613,7 +616,7 @@ def sre(flow, meta):
                thresholds(("green", None), ("yellow", 1), ("red", 50)), graph=False, decimals=0), 6, 4)
     b.add(timeseries("En eski açık bloke zamanla (s)", [
         (f'max(reconciler_saga_oldest_open_seconds{{impl="flink", flow="{flow}"}})', "en eski bloke"),
-    ], "s", "540 s üzeri: FAST sonucu zaman aşımına yaklaşıyor.", th=thresholds(("green", None), ("yellow", 300), ("red", 540))), 24, 6)
+    ], "s", "540 s üzeri: sonuç zaman aşımına yaklaşıyor.", th=thresholds(("green", None), ("yellow", 300), ("red", 540))), 24, 6)
 
     b.row("İşleme ve gecikme")
     b.add(timeseries("Giriş / çıkış kaydı / s", [

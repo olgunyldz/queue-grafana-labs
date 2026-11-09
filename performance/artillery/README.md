@@ -2,13 +2,15 @@
 
 Artillery senaryoları producer API'sine (`http://127.0.0.1:8080`, `producer-lb` arkasındaki replikalar) FAST, Havale ve EFT event'leri gönderir. Her transfer bir **request** ve aynı `transaction_id` ile bir **sonuç** (success / failed) olarak gönderilir. Test verileri (transaction_id, geçerli check digit'li TR IBAN, TRY tutar, banka kodu, hata nedeni) [processors/fast.cjs](processors/fast.cjs) ile sentetik üretilir.
 
+Banka kuralı: havale senaryoları gönderen ve alıcı için aynı bankayı, EFT senaryoları farklı bankaları üretir (`newHavaleTransfer`, `newEftTransfer`). FAST senaryoları rastgele banka çifti kullanır (`newTransfer`). Üretici kuralı ihlal edilirse istekler 400 döner ve senaryo hata verir.
+
 ## Ne ölçülür, ne ölçülmez
 
 Artillery yalnızca **HTTP tarafını** doğrular: 202 yanıtları ve yanıt süreleri (`ensure` eklentisi). Saga tarafı (bloke, kesinleşme, yeniden gönderim, manuel inceleme, aşama süreleri) Artillery'de ölçülmez; her koşumdan sonra Grafana'da kontrol edilir:
 
 | Kontrol | Nerede | Beklenen |
 |---|---|---|
-| Çakışma ve yeniden gönderim | Geliştirici → Saga | 0'a yakın |
+| Çakışma ve yeniden gönderim | Geliştirici → Saga | Çakışma 0; reddedilen transferin sonucu ayrı sayılır (`outcome_after_rejection`) |
 | Manuel inceleme | SRE → Saga, uyarı `Transfer saga manual review` | 0 (eksik sonuç senaryosu hariç) |
 | Açık bloke tutar | İş Birimi → Para hareketi | Koşum bitince 0 |
 | En eski açık bloke | SRE → Saga | Koşum bitince 0 |

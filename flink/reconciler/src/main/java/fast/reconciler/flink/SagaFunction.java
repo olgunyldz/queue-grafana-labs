@@ -30,12 +30,12 @@ import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.util.Collector;
 
 /**
- * Saga of one transfer (FAST, Havale or EFT), keyed by transaction_id. The saga decides what happens
+ * Saga of one transfer (Havale or EFT; FAST is handled the same way), keyed by transaction_id. The saga decides what happens
  * next and records it; the account balance is kept by the ledger, which executes the commands and
  * answers on {@code ledger_results}.
  *
  * <pre>
- *  request ──► BLOCK ──► ledger ──► BLOCKED ──► FAST outcome
+ *  request ──► BLOCK ──► ledger ──► BLOCKED ──► outcome (success / failed)
  *                          │                       ├─ success ─► SETTLE ─► SETTLED ─► COMPLETED
  *                          │                       └─ failed  ─► RELEASE ─► RELEASED ─► FAILED
  *                          └─► BLOCK_REJECTED ─► REJECTED
@@ -43,7 +43,7 @@ import org.apache.flink.util.Collector;
  *
  * <p>Commands are sent again when the ledger does not answer within SAGA_COMMAND_TIMEOUT, up to
  * SAGA_MAX_ATTEMPTS sends (the ledger ignores repeats). When that is exhausted, or when a block has no
- * FAST outcome within SAGA_OUTCOME_TIMEOUT, the transfer goes to MANUAL_REVIEW. Every state change is
+ * outcome within SAGA_OUTCOME_TIMEOUT, the transfer goes to MANUAL_REVIEW. Every state change is
  * published to {@code <flow>_transfer_status}.
  *
  * <p>Live measurements (reconciler_* metrics, see the Grafana saga sections): the number of transfers
@@ -176,7 +176,7 @@ final class SagaFunction extends KeyedProcessFunction<String, InputEvent, Output
             case SETTLING -> resendOrReview(key, s, "SETTLE", timestamp, context, out);
             case RELEASING -> resendOrReview(key, s, "RELEASE", timestamp, context, out);
             case BLOCKED -> {
-                s.failureReason = "no FAST outcome within " + settings.outcomeTimeoutMs() + " ms";
+                s.failureReason = "no outcome within " + settings.outcomeTimeoutMs() + " ms";
                 enter(key, s, MANUAL_REVIEW, timestamp, context, out);
             }
             case PENDING_REQUEST -> {
@@ -245,6 +245,9 @@ final class SagaFunction extends KeyedProcessFunction<String, InputEvent, Output
                 }
             }
             case BLOCKED -> applyOutcome(key, s, outcome, input.failureReason, now, ctx, out);
+            // The ledger refused the block, so the transfer never went on. An outcome for it is expected (the
+            // producer does not know about the refusal) and is counted apart from real anomalies.
+            case REJECTED -> count("outcome_after_rejection_total");
             default -> conflict("late_outcome");
         }
     }
@@ -297,7 +300,7 @@ final class SagaFunction extends KeyedProcessFunction<String, InputEvent, Output
         enter(input.transactionId, s, FAILED, now, ctx, out);
     }
 
-    /** The FAST outcome is known and the block is in place: settle on success, release on failure. */
+    /** The outcome is known and the block is in place: settle on success, release on failure. */
     private void applyOutcome(String key, SagaState s, String outcome, String reason, long now, Context ctx,
             Collector<OutputRecord> out) throws Exception {
         s.failureReason = reason;
@@ -429,6 +432,12 @@ final class SagaFunction extends KeyedProcessFunction<String, InputEvent, Output
         out.collect(new OutputRecord(config.flow() + "_transfer_status", key, node.toString()));
         count("transitions_total");
         count("state_" + s.state.toLowerCase(Locale.ROOT) + "_total");
+    }
+
+    /** Count of a named counter (0 when it has not been used); for tests. */
+    long counterValue(String name) {
+        Counter c = counters.get(name);
+        return c == null ? 0 : c.getCount();
     }
 
     private void conflict(String reason) {
