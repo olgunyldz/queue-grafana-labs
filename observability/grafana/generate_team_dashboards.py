@@ -389,6 +389,22 @@ def business(flow, meta):
         trend["options"]["legend"] = {"displayMode": "list", "placement": "right", "calcs": []}
         b.add(trend, 16, 4)
 
+    b.row("Para hareketi (saga)")
+    fl = f'{{impl="flink", flow="{flow}"}}'
+    b.add(stat("Ledger'da bloke tutar (TRY)", [(f"sum(reconciler_saga_open_amount_try{fl})", "")], "currencyTRY",
+               "Müşterilerin bakiyesinden ayrılmış, henüz kesinleşmemiş ya da iade edilmemiş tutar.", graph=False), 6, 5)
+    b.add(stat("Bloke bekleyen transfer", [(f'sum(reconciler_saga_open_transfers{{impl="flink", flow="{flow}", state=~"blocked|settling|releasing"}})', "")],
+               "short", "Bakiyesi ayrılmış ve sonucu henüz kesinleşmemiş transfer adedi.", graph=False, decimals=0), 6, 5)
+    b.add(stat("Kesinleşen tutar (aralıkta)", [(f"sum(increase(reconciler_saga_settled_kurus_total{fl}[$__range])) / 100", "")], "currencyTRY",
+               "Başarılı transferlerde karşı tarafa giden tutar.", graph=False), 6, 5)
+    b.add(stat("İade edilen tutar (aralıkta)", [(f"sum(increase(reconciler_saga_released_kurus_total{fl}[$__range])) / 100", "")], "currencyTRY",
+               "FAST başarısız olduğunda bloke tutarın gönderene iadesi.", graph=False), 6, 5)
+    b.add(stat("Bakiye yetersizliğiyle reddedilen (aralıkta)", [(f"sum(increase(reconciler_saga_rejected_kurus_total{fl}[$__range])) / 100", "")], "currencyTRY",
+               "Ledger bloke edemediği için gönderilmeyen tutar.", graph=False), 6, 5)
+    b.add(timeseries("Ledger'da bloke tutar zamanla (TRY)", [
+        (f"sum(reconciler_saga_open_amount_try{fl})", "bloke tutar"),
+    ], "currencyTRY", "Bloke tutarın zamanla değişimi. Düz çizgi yoksa bloke tutarlar kesinleşiyor ya da iade ediliyor demektir."), 24, 7)
+
     b.row("Bankalar")
     tbl = table("Banka özeti", [
         q.transfers("$__range", role="$role", by="bank"),
@@ -500,6 +516,13 @@ def developer(flow, meta):
     ], "short", "Çakışma: sırası uymayan ya da tekrar eden olay. Yeniden gönderim ve çakışma 0'a yakın olmalı.",
         th=thresholds(("green", None), ("red", 1))), 12, 8)
 
+    b.add(bargauge("Şu an her durumda transfer", [
+        (f'sum by (state) (reconciler_saga_open_transfers{{impl="flink", flow="{flow}"}})', "{{state}}"),
+    ], "short", "Saga'nın açık durumlarındaki anlık transfer sayısı (sonuç bekleyenler). Biriken durum bir darboğazdır."), 12, 7)
+    b.add(timeseries("Aşama süreleri p95", [
+        (f'histogram_quantile(0.95, sum by (le, stage) (rate(reconciler_saga_stage_seconds_bucket{{impl="flink", flow="{flow}"}}[$__rate_interval])))', "{{stage}}"),
+    ], "s", "İstekten bloğa (request_to_blocked), bloktan kesinleşmeye / iadeye geçen süre. Flink exactly-once çıktıları her checkpoint'te yayınlar (şu an 10 s), bu yüzden süreler tipik olarak checkpoint aralığı kadardır; daha kısa süre için CHECKPOINT_INTERVAL düşürülmelidir."), 12, 7)
+
     b.row("Flink job")
     tm = sel(flow=flow)
     b.add(timeseries("Task başına kayıt / s (giriş)", [
@@ -576,6 +599,21 @@ def sre(flow, meta):
                [(f"{q.transfers('$__range', q.fail)} / clamp_min({total}, 1)", "")],
                "percentunit", "Başarısız sonuçlanan transferlerin oranı (yetersiz bakiye, limit vb.). SLO'ya dahil değildir.",
                thresholds(("blue", None)), decimals=2, graph=False), 6, 4)
+
+    b.row("Saga (açık bloke ve kuyruk)")
+    b.add(stat("En eski açık bloke (s)", [(f'max(reconciler_saga_oldest_open_seconds{{impl="flink", flow="{flow}"}})', "")], "s",
+               "Ledger'da en uzun süredir bloke olan tutar. FAST sonucu 10 dk içinde gelmezse MANUAL_REVIEW olur.",
+               thresholds(("green", None), ("yellow", 300), ("red", 540)), graph=False, decimals=0), 6, 4)
+    b.add(stat("Manuel inceleme (aralıkta)", [(f'sum(increase(reconciler_saga_manual_review_total{{impl="flink", flow="{flow}"}}[$__range]))', "")], "short",
+               "Otomatik tamamlanamayan transferler. 0 olmalı.", thresholds(("green", None), ("red", 1)), graph=False, decimals=0), 6, 4)
+    b.add(stat("Yeniden gönderilen komut (aralıkta)", [(f'sum(increase(reconciler_saga_retries_total{{impl="flink", flow="{flow}"}}[$__range]))', "")], "short",
+               "Ledger zamanında cevap vermediği için tekrar gönderilen komutlar.", thresholds(("green", None), ("yellow", 1), ("red", 50)), graph=False, decimals=0), 6, 4)
+    b.add(stat("Çakışma (aralıkta)", [(f'sum(increase(reconciler_saga_conflicts_total{{impl="flink", flow="{flow}"}}[$__range]))', "")], "short",
+               "Sırası uymayan ya da tekrar eden olaylar. Tekrar gönderimden kaynaklanabilir; artıyorsa ledger ya da akış sorunludur.",
+               thresholds(("green", None), ("yellow", 1), ("red", 50)), graph=False, decimals=0), 6, 4)
+    b.add(timeseries("En eski açık bloke zamanla (s)", [
+        (f'max(reconciler_saga_oldest_open_seconds{{impl="flink", flow="{flow}"}})', "en eski bloke"),
+    ], "s", "540 s üzeri: FAST sonucu zaman aşımına yaklaşıyor.", th=thresholds(("green", None), ("yellow", 300), ("red", 540))), 24, 6)
 
     b.row("İşleme ve gecikme")
     b.add(timeseries("Giriş / çıkış kaydı / s", [
@@ -719,6 +757,14 @@ def platform_services():
     b.add(timeseries("CPU", [(f"rate(process_cpu_seconds_total{dn}[$__rate_interval])", "{{job}} {{instance}}")], "percentunit"), 6, 7)
     b.add(timeseries("GC / s", [(f"sum by (job, instance) (rate(dotnet_collection_count_total{dn}[$__rate_interval]))", "{{job}} {{instance}}")], "short"), 6, 7)
 
+    b.row("Ledger (mock hesap servisi)")
+    b.add(timeseries("Komut ve cevap / s", [
+        ('sum(rate(kafka_topic_partition_current_offset{topic="ledger_commands"}[$__rate_interval]))', "BLOCK / SETTLE / RELEASE"),
+        ('sum(rate(kafka_topic_partition_current_offset{topic="ledger_results"}[$__rate_interval]))', "cevap"),
+    ], "reqps", "Ledger'a giden komutlar ve geri dönen cevaplar. Ayrılmaz ikiliyse cevap hızı komut hızını izler; fark birikiyor demektir."), 16, 8)
+    b.add(stat("Komut kuyruğu (toplam lag)", [('sum(kafka_consumergroup_lag{consumergroup="ledger"}) or vector(0)', "")], "short",
+               "Ledger'ın okumadığı komut sayısı. Yüksek değer ledger'ın yavaşladığını gösterir.",
+               thresholds(("green", None), ("yellow", 100), ("red", 1000)), graph=False), 8, 8)
     b.row("Loglar")
     app = '{container=~".*mock-(producer|consumer).*"}'
     b.add(log_volume("Hata / uyarı log sayısı",

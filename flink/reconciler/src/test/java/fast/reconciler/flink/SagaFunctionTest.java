@@ -151,6 +151,50 @@ class SagaFunctionTest {
         assertTrue(drain().isEmpty());
     }
 
+    @Test
+    void measuresOpenBlocksAndHeldAmount() throws Exception {
+        request("tx-9", 0);
+        assertEquals(1, saga().countOpen(1), "REQUESTED");
+        ledger("BLOCKED", "tx-9", 100);
+        drain();
+        assertEquals(1, saga().countOpen(2), "BLOCKED");
+        assertEquals(12_550, saga().openAmountKurus(), "125.50 TRY held");
+        outcome("fast_incoming_success", "tx-9", 200);
+        drain();
+        assertEquals(12_550, saga().openAmountKurus(), "still held while settling");
+        ledger("SETTLED", "tx-9", 300);
+        drain();
+        assertEquals(0, saga().openAmountKurus(), "released from the open map once completed");
+        assertEquals(0, saga().countOpen(2));
+    }
+
+    @Test
+    void openSagasSurviveACheckpoint() throws Exception {
+        request("tx-10", 0);
+        ledger("BLOCKED", "tx-10", 100);
+        drain();
+        var snapshot = harness.snapshot(1, 1);
+        harness.close();
+
+        FlinkReconcilerConfig config = new FlinkReconcilerConfig(
+                "dummy:9092", "fast", "flink-fast-reconciler-test",
+                "fast_incoming_request", "fast_incoming_success", "fast_incoming_failed",
+                "fast_transfer_matched", "fast_transfer_unmatched", 30_000, 600_000, 10_000, 1);
+        SagaFunction restored = new SagaFunction(config, SagaSettings.defaults());
+        harness = new KeyedOneInputStreamOperatorTestHarness<>(
+                new KeyedProcessOperator<>(restored),
+                InputEvent::key,
+                BasicTypeInfo.STRING_TYPE_INFO,
+                1,
+                1,
+                0);
+        harness.setup();
+        harness.initializeState(snapshot);
+        harness.open();
+        assertEquals(12_550, restored.openAmountKurus(), "the held amount is restored");
+        assertEquals(1, restored.countOpen(2));
+    }
+
     // ---- helpers ---------------------------------------------------------------------------
 
     /** Outputs since the previous call: extractOutputValues() returns everything collected so far. */
@@ -176,6 +220,11 @@ class SagaFunctionTest {
         String json = "{\"event\":\"" + result + "\",\"transaction_id\":\"" + tx + "\"}";
         harness.processElement(new StreamRecord<>(
                 KafkaInputEventDeserializer.parse(json.getBytes(StandardCharsets.UTF_8), at)));
+    }
+
+    /** The saga function of the running harness: the gauges are read from it. */
+    private SagaFunction saga() throws Exception {
+        return (SagaFunction) ((KeyedProcessOperator<?, ?, ?>) harness.getOperator()).getUserFunction();
     }
 
     private String lastState() {

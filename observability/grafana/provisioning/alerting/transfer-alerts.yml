@@ -285,6 +285,26 @@ groups:
           description: "{{ if $values.A }}{{ printf \"%.0f\" $values.A.Value }} transfer(s){{ else }}A transfer{{ end }} in flow {{ $labels.flow }} could not be completed automatically in the last 10 minutes: the ledger did not answer after several sends, or a blocked amount had no FAST outcome. See the Geliştirici dashboard, Saga section, and the flow's <flow>_transfer_status topic."
         isPaused: false
 
+      - uid: transfer-saga-open-block-old
+        title: Transfer saga open block too old
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: PBFA97CFB590B2093
+            model: { refId: A, expr: 'max by (flow) (reconciler_saga_oldest_open_seconds{impl="flink"})', instant: true, range: false, intervalMs: 1000, maxDataPoints: 43200 }
+          - refId: C
+            datasourceUid: __expr__
+            model: { refId: C, type: threshold, expression: A, conditions: [{ evaluator: { type: gt, params: [540] } }] }
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, domain: transfer }
+        annotations:
+          summary: "Blocked amount has been waiting too long (flow {{ $labels.flow }})"
+          description: "The oldest blocked amount in flow {{ $labels.flow }} has been held for {{ if $values.A }}{{ printf \"%.0f\" $values.A.Value }} s{{ else }}more than 9 minutes{{ end }}. The saga gives up after 10 minutes without a FAST outcome; check FAST and the ledger."
+        isPaused: false
+
       - uid: fast-stuck-transfers-high
         title: Transfer stuck transfers high
         condition: C

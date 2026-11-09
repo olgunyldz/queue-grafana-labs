@@ -921,12 +921,386 @@
     },
     {
       "type": "row",
-      "title": "İşleme ve gecikme",
+      "title": "Saga (açık bloke ve kuyruk)",
       "id": 16,
       "collapsed": false,
       "gridPos": {
         "x": 0,
         "y": 13,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "En eski açık bloke (s)",
+      "description": "Ledger'da en uzun süredir bloke olan tutar. FAST sonucu 10 dk içinde gelmezse MANUAL_REVIEW olur.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "max(reconciler_saga_oldest_open_seconds{impl=\"flink\", flow=\"fast\"})",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 300
+              },
+              {
+                "color": "red",
+                "value": 540
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 6,
+        "h": 4
+      },
+      "id": 17
+    },
+    {
+      "type": "stat",
+      "title": "Manuel inceleme (aralıkta)",
+      "description": "Otomatik tamamlanamayan transferler. 0 olmalı.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum(increase(reconciler_saga_manual_review_total{impl=\"flink\", flow=\"fast\"}[$__range]))",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 14,
+        "w": 6,
+        "h": 4
+      },
+      "id": 18
+    },
+    {
+      "type": "stat",
+      "title": "Yeniden gönderilen komut (aralıkta)",
+      "description": "Ledger zamanında cevap vermediği için tekrar gönderilen komutlar.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum(increase(reconciler_saga_retries_total{impl=\"flink\", flow=\"fast\"}[$__range]))",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 14,
+        "w": 6,
+        "h": 4
+      },
+      "id": 19
+    },
+    {
+      "type": "stat",
+      "title": "Çakışma (aralıkta)",
+      "description": "Sırası uymayan ya da tekrar eden olaylar. Tekrar gönderimden kaynaklanabilir; artıyorsa ledger ya da akış sorunludur.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum(increase(reconciler_saga_conflicts_total{impl=\"flink\", flow=\"fast\"}[$__range]))",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 14,
+        "w": 6,
+        "h": 4
+      },
+      "id": 20
+    },
+    {
+      "type": "timeseries",
+      "title": "En eski açık bloke zamanla (s)",
+      "description": "540 s üzeri: FAST sonucu zaman aşımına yaklaşıyor.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "max(reconciler_saga_oldest_open_seconds{impl=\"flink\", flow=\"fast\"})",
+          "legendFormat": "en eski bloke",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 300
+              },
+              {
+                "color": "red",
+                "value": 540
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 24,
+        "h": 6
+      },
+      "id": 21
+    },
+    {
+      "type": "row",
+      "title": "İşleme ve gecikme",
+      "id": 22,
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 24,
         "w": 24,
         "h": 1
       },
@@ -1011,11 +1385,11 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 14,
+        "y": 25,
         "w": 8,
         "h": 8
       },
-      "id": 17
+      "id": 23
     },
     {
       "type": "timeseries",
@@ -1103,11 +1477,11 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 14,
+        "y": 25,
         "w": 8,
         "h": 8
       },
-      "id": 18
+      "id": 24
     },
     {
       "type": "timeseries",
@@ -1184,11 +1558,11 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 14,
+        "y": 25,
         "w": 8,
         "h": 8
       },
-      "id": 19
+      "id": 25
     },
     {
       "type": "timeseries",
@@ -1265,11 +1639,11 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 22,
+        "y": 33,
         "w": 12,
         "h": 7
       },
-      "id": 20
+      "id": 26
     },
     {
       "type": "timeseries",
@@ -1346,20 +1720,20 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 22,
+        "y": 33,
         "w": 12,
         "h": 7
       },
-      "id": 21
+      "id": 27
     },
     {
       "type": "row",
       "title": "Checkpoint",
-      "id": 22,
+      "id": 28,
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 29,
+        "y": 40,
         "w": 24,
         "h": 1
       },
@@ -1440,11 +1814,11 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 30,
+        "y": 41,
         "w": 8,
         "h": 7
       },
-      "id": 23
+      "id": 29
     },
     {
       "type": "timeseries",
@@ -1525,11 +1899,11 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 30,
+        "y": 41,
         "w": 8,
         "h": 7
       },
-      "id": 24
+      "id": 30
     },
     {
       "type": "timeseries",
@@ -1610,20 +1984,20 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 30,
+        "y": 41,
         "w": 8,
         "h": 7
       },
-      "id": 25
+      "id": 31
     },
     {
       "type": "row",
       "title": "Kaynaklar (paylaşılan cluster)",
-      "id": 26,
+      "id": 32,
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 37,
+        "y": 48,
         "w": 24,
         "h": 1
       },
@@ -1715,11 +2089,11 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 38,
+        "y": 49,
         "w": 8,
         "h": 7
       },
-      "id": 27
+      "id": 33
     },
     {
       "type": "timeseries",
@@ -1807,11 +2181,11 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 38,
+        "y": 49,
         "w": 8,
         "h": 7
       },
-      "id": 28
+      "id": 34
     },
     {
       "type": "timeseries",
@@ -1881,20 +2255,20 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 38,
+        "y": 49,
         "w": 8,
         "h": 7
       },
-      "id": 29
+      "id": 35
     },
     {
       "type": "row",
       "title": "Uyarılar ve loglar",
-      "id": 30,
+      "id": 36,
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 45,
+        "y": 56,
         "w": 24,
         "h": 1
       },
@@ -1923,11 +2297,11 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 46,
+        "y": 57,
         "w": 10,
         "h": 9
       },
-      "id": 31
+      "id": 37
     },
     {
       "type": "timeseries",
@@ -1996,11 +2370,11 @@
       },
       "gridPos": {
         "x": 10,
-        "y": 46,
+        "y": 57,
         "w": 14,
         "h": 9
       },
-      "id": 32
+      "id": 38
     }
   ]
 }

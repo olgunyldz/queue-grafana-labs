@@ -1584,13 +1584,150 @@
       "id": 23
     },
     {
-      "type": "row",
-      "title": "Flink job",
-      "id": 24,
-      "collapsed": false,
+      "type": "bargauge",
+      "title": "Şu an her durumda transfer",
+      "description": "Saga'nın açık durumlarındaki anlık transfer sayısı (sonuç bekleyenler). Biriken durum bir darboğazdır.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "sum by (state) (reconciler_saga_open_transfers{impl=\"flink\", flow=\"fast\"})",
+          "legendFormat": "{{state}}",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "valueMode": "color",
+        "namePlacement": "auto",
+        "sizing": "auto"
+      },
       "gridPos": {
         "x": 0,
         "y": 58,
+        "w": 12,
+        "h": 7
+      },
+      "id": 24
+    },
+    {
+      "type": "timeseries",
+      "title": "Aşama süreleri p95",
+      "description": "İstekten bloğa (request_to_blocked), bloktan kesinleşmeye / iadeye geçen süre. Flink exactly-once çıktıları her checkpoint'te yayınlar (şu an 10 s), bu yüzden süreler tipik olarak checkpoint aralığı kadardır; daha kısa süre için CHECKPOINT_INTERVAL düşürülmelidir.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, stage) (rate(reconciler_saga_stage_seconds_bucket{impl=\"flink\", flow=\"fast\"}[$__rate_interval])))",
+          "legendFormat": "{{stage}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 58,
+        "w": 12,
+        "h": 7
+      },
+      "id": 25
+    },
+    {
+      "type": "row",
+      "title": "Flink job",
+      "id": 26,
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 65,
         "w": 24,
         "h": 1
       },
@@ -1664,11 +1801,11 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 59,
+        "y": 66,
         "w": 12,
         "h": 7
       },
-      "id": 25
+      "id": 27
     },
     {
       "type": "timeseries",
@@ -1749,20 +1886,20 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 59,
+        "y": 66,
         "w": 12,
         "h": 7
       },
-      "id": 26
+      "id": 28
     },
     {
       "type": "row",
       "title": "Loglar",
-      "id": 27,
+      "id": 29,
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 66,
+        "y": 73,
         "w": 24,
         "h": 1
       },
@@ -1835,11 +1972,11 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 67,
+        "y": 74,
         "w": 24,
         "h": 6
       },
-      "id": 28
+      "id": 30
     },
     {
       "type": "logs",
@@ -1870,11 +2007,11 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 73,
+        "y": 80,
         "w": 12,
         "h": 10
       },
-      "id": 29
+      "id": 31
     },
     {
       "type": "logs",
@@ -1905,11 +2042,11 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 73,
+        "y": 80,
         "w": 12,
         "h": 10
       },
-      "id": 30
+      "id": 32
     }
   ]
 }

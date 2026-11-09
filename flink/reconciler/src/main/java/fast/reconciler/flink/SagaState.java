@@ -19,6 +19,10 @@ public class SagaState {
     /** Processing time at which a finished saga is removed from state. */
     public long clearAt;
     public long createdAt;
+    /** Processing time at which the ledger confirmed the block (0 until then). */
+    public long blockedAt;
+    /** The transaction_id this saga belongs to (the key; needed to track the open sagas). */
+    public String transactionId;
 
     public SagaState() {
     }
