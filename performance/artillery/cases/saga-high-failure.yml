@@ -1,0 +1,37 @@
+# Saga high failure: half of the FAST transfers fail after the block (5 minutes, 20 transfers/s).
+# Expected in Grafana: every failed transfer goes BLOCKED -> RELEASING -> RELEASED -> FAILED, the
+# released amount rises, the held amount falls back to 0, and the transfer-failure alerts fire.
+config:
+  target: http://127.0.0.1:8080
+  processor: ../processors/fast.cjs
+  plugins:
+    expect: {}
+    ensure:
+      thresholds:
+        - http.response_time.p95: 1000
+  phases:
+    - name: sustained
+      duration: 300
+      arrivalRate: 20
+    - name: drain
+      duration: 60
+      arrivalRate: 1
+  http:
+    timeout: 30
+
+scenarios:
+  - name: fast-incoming-failed
+    weight: 1
+    flow:
+      - function: newTransfer
+      - post: { url: /events/fast/incoming/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 20
+      - post: { url: /events/fast/incoming/failed, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+
+  - name: fast-incoming-success
+    weight: 1
+    flow:
+      - function: newTransfer
+      - post: { url: /events/fast/incoming/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 20
+      - post: { url: /events/fast/incoming/success, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }

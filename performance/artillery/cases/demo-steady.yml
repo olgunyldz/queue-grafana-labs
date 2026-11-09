@@ -1,0 +1,106 @@
+# Demo steady: a long, low-rate run that keeps every dashboard populated, for demos.
+# About 3 transfers/s across all flows, for one hour by default. The outcome comes 20 s after the
+# request (after the block), so the dashboards show the real order of events. About 1 in 100 transfers
+# never gets an outcome: they stay blocked for 10 minutes and then go to MANUAL_REVIEW, so the
+# manual review and open-block panels have something to show.
+# Stop it with Ctrl+C at any time; it can be started again.
+#
+# Run: npm run test:demo-steady   (the stack must be up)
+config:
+  target: http://127.0.0.1:8080
+  processor: ../processors/fast.cjs
+  plugins:
+    expect: {}
+  phases:
+    - name: steady
+      duration: 3600
+      arrivalRate: 3
+  http:
+    timeout: 30
+
+scenarios:
+  - name: fast-incoming-success
+    weight: 22
+    flow:
+      - function: newTransfer
+      - post: { url: /events/fast/incoming/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 20
+      - post: { url: /events/fast/incoming/success, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+
+  - name: fast-incoming-failed
+    weight: 3
+    flow:
+      - function: newTransfer
+      - post: { url: /events/fast/incoming/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 20
+      - post: { url: /events/fast/incoming/failed, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+
+  - name: fast-outgoing-success
+    weight: 22
+    flow:
+      - function: newTransfer
+      - post: { url: /events/fast/outgoing/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 20
+      - post: { url: /events/fast/outgoing/success, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+
+  - name: fast-outgoing-failed
+    weight: 3
+    flow:
+      - function: newTransfer
+      - post: { url: /events/fast/outgoing/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 20
+      - post: { url: /events/fast/outgoing/failed, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+
+  - name: havale-success
+    weight: 15
+    flow:
+      - function: newTransfer
+      - post: { url: /events/havale/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 20
+      - post: { url: /events/havale/success, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+
+  - name: havale-failed
+    weight: 2
+    flow:
+      - function: newTransfer
+      - post: { url: /events/havale/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 20
+      - post: { url: /events/havale/failed, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+
+  - name: eft-incoming-success
+    weight: 12
+    flow:
+      - function: newTransfer
+      - post: { url: /events/eft/incoming/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 20
+      - post: { url: /events/eft/incoming/success, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+
+  - name: eft-incoming-failed
+    weight: 2
+    flow:
+      - function: newTransfer
+      - post: { url: /events/eft/incoming/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 20
+      - post: { url: /events/eft/incoming/failed, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+
+  - name: eft-outgoing-success
+    weight: 12
+    flow:
+      - function: newTransfer
+      - post: { url: /events/eft/outgoing/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 20
+      - post: { url: /events/eft/outgoing/success, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+
+  - name: eft-outgoing-failed
+    weight: 2
+    flow:
+      - function: newTransfer
+      - post: { url: /events/eft/outgoing/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 20
+      - post: { url: /events/eft/outgoing/failed, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+
+  - name: fast-incoming-no-outcome
+    weight: 1
+    flow:
+      - function: newTransfer
+      - post: { url: /events/fast/incoming/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }

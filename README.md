@@ -26,7 +26,7 @@ Projeyi yeni açan bir geliştirici için en önemli fikir şudur:
 
 ```mermaid
 flowchart LR
-    Client["Client / Artillery / demo-traffic"] --> LB["producer-lb\n127.0.0.1:8080"]
+    Client["Client / Artillery"] --> LB["producer-lb\n127.0.0.1:8080"]
     LB --> P["mock-producer\n2 replika"]
     P --> K[(Kafka)]
 
@@ -148,7 +148,7 @@ Invoke-RestMethod -Method Post `
 
 `transaction_id` ve `amount` (> 0) her event'te zorunludur; eşleşen kayıtta tutar ve bankalar request'ten alınır. Başarılı HTTP kabulü `202` (gövdede UUIDv7 event `id`), geçersiz body `400`, bilinmeyen endpoint `404`, Kafka istemci kuyruğuna yazılamazsa `503` döndürür.
 
-Panoları sürekli trafikle doldurmak için: `python performance/demo-traffic/traffic.py` (bkz. [dashboard.md → Demo akışı](./dashboard.md#5-demo-akışı)).
+Panoları sürekli trafikle doldurmak için: `npm run test:demo-steady` (bkz. [dashboard.md → Demo akışı](./dashboard.md#5-demo-akışı)).
 
 ## Reconciler’lar
 
@@ -233,7 +233,7 @@ python observability/grafana/generate_team_dashboards.py
 docker compose restart grafana   # Windows bind mount’ta dosya değişikliği otomatik algılanmayabilir
 ```
 
-Panoları demo için doldurmak (başarısız ve sonuçsuz işlemler dahil): `python performance/demo-traffic/traffic.py` (ayrıntı: [dashboard.md → Demo akışı](./dashboard.md#5-demo-akışı)).
+Panoları demo için doldurmak (başarısız ve sonuçsuz işlemler dahil): `npm run test:demo-steady` (ayrıntı: [dashboard.md → Demo akışı](./dashboard.md#5-demo-akışı)).
 
 ### Platform panoları
 
@@ -337,8 +337,7 @@ observability/
   nginx/                      Producer load balancer config
 
 performance/
-  artillery/                  Artillery yük ve alarm senaryoları
-  demo-traffic/traffic.py     Demo trafiği (Python, kurulum gerektirmez)
+  artillery/                  Artillery senaryoları: smoke, saga yükü, kapasite, hata ve eksik sonuç
 
 volumes/                      Local persistent data; Git tarafından ignore edilir
 docker-compose.yml            Local stack tanımı
@@ -347,13 +346,13 @@ dashboard.md                 Dashboard ve alert ayrıntıları
 
 ## Performans testleri
 
-- **Demo trafiği:** [performance/demo-traffic/traffic.py](./performance/demo-traffic/traffic.py) — tüm akışlara başarısız ve sonuçsuz işlemler dahil sürekli trafik; yalnızca Python gerekir.
-- **Yük ve alarm testleri:** [performance/artillery/](./performance/artillery/) — case listesi, süreleri ve tetikledikleri alarmlar [Artillery README](./performance/artillery/README.md) dosyasındadır.
+- **Demo trafiği:** `npm run test:demo-steady` ([demo-steady](./performance/artillery/cases/demo-steady.yml)) — tüm akışlara başarısız ve sonuçsuz işlemler dahil, gerçekçi sırada sürekli trafik.
+- **Artillery senaryoları:** [performance/artillery/](./performance/artillery/) — senaryolar, hangi saga kontrollerinin Grafana’da bakılacağı ve çalıştırma kuralları [Artillery README](./performance/artillery/README.md) dosyasındadır. Artillery yalnızca HTTP tarafını ölçer.
 
 ```powershell
 cd performance/artillery
 npm install
-npm run test:mixed-high-load
+npm run test:saga-load
 ```
 
 Runner Docker komutu çalıştırmaz ve servis durumunu değiştirmez. `request-backlog` gibi servis durumu gerektiren case'ler için servisleri testten önce elle hazırlayın. Alarm case'lerini aynı anda çalıştırmayın; trafikleri birbirine karışır.

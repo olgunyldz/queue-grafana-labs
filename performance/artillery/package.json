@@ -1,22 +1,20 @@
 {
-  "name": "kafka-producer-artillery-tests",
+  "name": "transfer-artillery-tests",
   "private": true,
-  "version": "1.0.0",
-  "description": "Artillery performance and alert scenarios for the FAST, Havale and EFT transfer demo",
+  "version": "2.0.0",
+  "description": "Artillery load and smoke scenarios for the FAST, Havale and EFT transfer flows (saga)",
   "scripts": {
-    "test:all": "node scripts/run-case.mjs all",
-    "test:both-open": "node scripts/run-case.mjs both-open",
-    "test:mixed-high-load": "node scripts/run-case.mjs mixed-high-load",
+    "test:smoke": "node scripts/run-case.mjs smoke",
+    "test:saga-load": "node scripts/run-case.mjs saga-load",
+    "test:saga-spike": "node scripts/run-case.mjs saga-spike",
+    "test:saga-early-outcome": "node scripts/run-case.mjs saga-early-outcome",
+    "test:saga-high-failure": "node scripts/run-case.mjs saga-high-failure",
+    "test:saga-missing-outcomes": "node scripts/run-case.mjs saga-missing-outcomes",
     "test:request-backlog": "node scripts/run-case.mjs request-backlog",
-    "test:no-request": "node scripts/run-case.mjs no-request",
-    "test:consumer-only": "node scripts/run-case.mjs consumer-only",
-    "test:directional-endpoints": "node scripts/run-case.mjs directional-endpoints",
-    "test:missing-outcomes": "node scripts/run-case.mjs missing-outcomes",
-    "test:high-failure": "node scripts/run-case.mjs high-failure",
-    "test:request-spike": "node scripts/run-case.mjs request-spike",
     "test:low-volume": "node scripts/run-case.mjs low-volume",
+    "test:all": "node scripts/run-case.mjs smoke saga-load",
     "artillery": "artillery run",
-    "test": "node scripts/run-case.mjs"
+    "test:demo-steady": "node scripts/run-case.mjs demo-steady"
   },
   "devDependencies": {
     "artillery": "2.0.34"

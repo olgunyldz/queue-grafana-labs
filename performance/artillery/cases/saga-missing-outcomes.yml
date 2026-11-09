@@ -1,0 +1,34 @@
+# Saga missing outcomes: a quarter of the blocked FAST transfers never get an outcome.
+# Those amounts stay blocked until the saga gives up after 10 minutes and sends them to MANUAL_REVIEW.
+# The run lasts 12 minutes so the first manual reviews appear before the end.
+# Expected in Grafana: the held amount and the oldest open block grow to ~600 s, the manual review alert
+# fires, and the open blocks are cleared once the 10-minute limit passes.
+config:
+  target: http://127.0.0.1:8080
+  processor: ../processors/fast.cjs
+  plugins:
+    expect: {}
+    ensure:
+      thresholds:
+        - http.response_time.p95: 1000
+  phases:
+    - name: sustained
+      duration: 720
+      arrivalRate: 10
+  http:
+    timeout: 30
+
+scenarios:
+  - name: fast-incoming-answered
+    weight: 3
+    flow:
+      - function: newTransfer
+      - post: { url: /events/fast/incoming/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 20
+      - post: { url: /events/fast/incoming/success, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+
+  - name: fast-outgoing-missing
+    weight: 1
+    flow:
+      - function: newTransfer
+      - post: { url: /events/fast/outgoing/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }

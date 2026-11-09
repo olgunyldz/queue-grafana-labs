@@ -1,22 +1,21 @@
-# Alert test: very low traffic for 7 minutes (~60 transfers / 5m, < 100).
-# Run it between 09:00 and 18:00 Istanbul time -> "Transfer request volume low" and
-# "Transfer outcome volume low" (flow fast). Outside business hours these alerts stay Normal.
+# Low volume: about 12 transfers per minute (0.2/s) for 7 minutes, FAST incoming, outcome after the block.
+# Run it between 09:00 and 18:00 Istanbul time: the low-volume alerts are evaluated only then.
 config:
   target: http://127.0.0.1:8080
   processor: ../processors/fast.cjs
   plugins:
     expect: {}
   phases:
-    - name: low-volume
+    - name: low
       duration: 420
       arrivalRate: 0.2
   http:
-    timeout: 10
+    timeout: 30
 
 scenarios:
-  - name: send-then-success
+  - name: fast-incoming-success
     flow:
       - function: newTransfer
-      - post: { url: /events/fast/incoming/request, beforeRequest: fastBody, expect: [{ statusCode: 202 }] }
-      - think: 0.2
-      - post: { url: /events/fast/incoming/success, beforeRequest: fastBody, expect: [{ statusCode: 202 }] }
+      - post: { url: /events/fast/incoming/request, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }
+      - think: 20
+      - post: { url: /events/fast/incoming/success, beforeRequest: eventBody, expect: [{ statusCode: 202 }] }

@@ -254,15 +254,15 @@ Alarmlar Grafana Alerting ile tanımlıdır. Her alarm **akış başına ayrı b
 - **Oranlar için en az 20 event:** aksi hâlde düşük trafikte tek bir sonuçsuz transfer "%100 mismatch" yapardı.
 - **Backlog boşalırken** `mismatch` alarmı kısa süre pending olabilir; 5 dakikadan kısa sürerse firing olmaz.
 
-**Alarmları test etmek** için Artillery case'leri vardır ([performance/artillery/README.md](./performance/artillery/README.md)). Alarm case'leri çoğunlukla FAST'e trafik üretir; `mixed-high-load` ve `directional-endpoints` üç akışı birlikte kullanır. Case'ler aynı anda çalıştırılmamalıdır.
+**Alarmları test etmek** için Artillery senaryoları vardır ([performance/artillery/README.md](./performance/artillery/README.md)). Senaryolar ilgili alarmı tetikleyecek şekilde ayarlıdır; aynı anda çalıştırılmamalıdır.
 
 | Case | Tetiklediği alarm |
 |---|---|
-| `missing-outcomes` | request/outcome mismatch |
-| `high-failure` | failed count high, failed/success ratio high |
-| `fast-send-spike` | request volume high, outcome volume high |
+| `saga-missing-outcomes` | request/outcome mismatch; açık bloke tutar büyür, 10 dk sonra manuel inceleme |
+| `saga-high-failure` | failed count high, failed/success ratio high; bloke tutar iade edilir |
+| `saga-spike` | request volume high, outcome volume high (kapasite: 5 → 120/s) |
 | `low-volume` (yalnızca mesai saatinde) | request volume low, outcome volume low |
-| `fast-send-backlog` | 30 s sonra takılan transferler artar; 50'yi geçip 5 dk sürerse stuck transfers high |
+| `request-backlog` (Flink durdurulmuşken) | reconciler lag birikir; 30 s sonra takılan transferler artar, 50'yi geçip 5 dk sürerse stuck transfers high |
 | `docker compose stop flink-havale-taskmanager` (elle) | 2 dk sonra Havale için TaskManager metrics down, No registered TaskManagers |
 
 **Eşik veya süre değiştirmek:**
@@ -285,15 +285,9 @@ Mesai saatleri `rules/transfers.yml` içindeki `transfer:business_hours` kuralı
 4. **Platform** (`Platform · Flink`): üç cluster yan yana; bir akışın cluster'ı durursa diğerlerinin etkilenmediğini göstermek için `docker compose stop flink-havale-taskmanager` → Havale kırmızıya döner, FAST ve EFT çalışmaya devam eder → `docker compose start flink-havale-taskmanager`.
 5. **Dayanıklılık** (isteğe bağlı): `docker compose restart flink-jobmanager` → job’lar supervisor tarafından son checkpoint’ten yeniden gönderilir; `FAST · Geliştirici` → State’teki kayıtlar restart öncesiyle aynı kalır.
 
-Demo trafiği için [performance/demo-traffic/traffic.py](./performance/demo-traffic/traffic.py) (yalnızca Python standart kütüphanesi) kullanılır. Varsayılan ayar 30 dakika boyunca saniyede 15 transfer gönderir; transferlerin %8'i başarısız, %2'si sonuçsuz biter ve bir banka (Papara) daha sık hata verir, böylece panolardaki sarı / kırmızı değerler ve banka panelleri dolu görünür. Demodan 15–20 dakika önce başlatın:
+Demo trafiği için [demo-steady](./performance/artillery/cases/demo-steady.yml) senaryosu kullanılır (`npm run test:demo-steady`; varsayılan 1 saat, ~3 transfer/s, Ctrl+C ile durdurulur). Transferlerin yaklaşık %9'u başarısız, %1'i sonuçsuz kalır; böylece sarı / kırmızı değerler, bloke tutar ve manuel inceleme panelleri dolu görünür. Demodan 15–20 dakika önce başlatın: `npm run test:demo-steady`.
 
-```powershell
-python performance/demo-traffic/traffic.py                                    # 30 dk, 15/s, tüm akışlar
-python performance/demo-traffic/traffic.py --minutes 10 --rate 30 --flows fast,eft
-python performance/demo-traffic/traffic.py --failure-rate 0.01 --missing-rate 0 # "sağlıklı" görünüm
-```
-
-Artillery case'leri (`mixed-high-load`, `directional-endpoints`) yük ve alarm testleri içindir.
+Artillery senaryoları yük, kapasite ve alarm testleri içindir; `smoke` her koşumdan önce endpoint'leri kontrol eder.
 
 ---
 
